@@ -62,6 +62,7 @@ type Suite struct {
 	suiteIDContext [10]byte
 	suiteIDKEM     [5]byte
 	hash           func() hash.Hash
+	prkBytes       uint16
 	// KeyBytes - Size of the AEAD key, in bytes
 	KeyBytes     uint16
 	nonceBytes   uint16
@@ -88,6 +89,13 @@ func NewSuite(kemID KemID, kdfID KdfID, aeadID AeadID) (*Suite, error) {
 	default:
 		return nil, errors.New("unimplemented suite")
 	}
+	var prkBytes uint16
+	switch kdfID {
+	case KdfHkdfSha256:
+		prkBytes = 32
+	default:
+		return nil, errors.New("unimplemented suite")
+	}
 	var kemHashBytes uint16
 	switch kemID {
 	case KemX25519HkdfSha256:
@@ -98,9 +106,11 @@ func NewSuite(kemID KemID, kdfID KdfID, aeadID AeadID) (*Suite, error) {
 	suite := Suite{
 		suiteIDContext: getSuiteIDContext(kemID, kdfID, aeadID),
 		suiteIDKEM:     getSuiteIDKEM(kemID),
-		hash:           hash, KeyBytes: keyBytes,
-		nonceBytes:   nonceBytes,
-		kemHashBytes: kemHashBytes,
+		hash:           hash,
+		KeyBytes:       keyBytes,
+		prkBytes:       prkBytes,
+		nonceBytes:     nonceBytes,
+		kemHashBytes:   kemHashBytes,
 	}
 	return &suite, nil
 }
@@ -161,10 +171,11 @@ func verifyPskInputs(mode Mode, psk []byte, pskID []byte) error {
 
 // Context - An AEAD context
 type Context struct {
-	suite        *Suite
-	SharedSecret []byte
-	BaseNonce    []byte
-	counter      []byte
+	suite          *Suite
+	SharedSecret   []byte
+	ExporterSecret []byte
+	BaseNonce      []byte
+	counter        []byte
 }
 
 func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk []byte, pskID []byte) (Context, error) {
@@ -181,6 +192,7 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk []b
 	if err != nil {
 		return Context{}, err
 	}
+	exporterSecret, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "exp", keyScheduleContext, suite.prkBytes)
 	baseNonce, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "base_nonce", keyScheduleContext, suite.nonceBytes)
 	if err != nil {
 		return Context{}, err
@@ -190,10 +202,11 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk []b
 		counter[i] = 0
 	}
 	return Context{
-		suite:        suite,
-		SharedSecret: sharedSecret,
-		BaseNonce:    baseNonce,
-		counter:      counter,
+		suite:          suite,
+		SharedSecret:   sharedSecret,
+		ExporterSecret: exporterSecret,
+		BaseNonce:      baseNonce,
+		counter:        counter,
 	}, nil
 }
 
