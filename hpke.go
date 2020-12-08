@@ -129,13 +129,29 @@ func getSuiteIDKEM(kemID KemID) [5]byte {
 	return suiteIDKEM
 }
 
+// Extract - KDF-Extract
+func (suite *Suite) Extract(secret []byte, salt []byte) []byte {
+	return hkdf.Extract(suite.hash, secret, salt)
+}
+
+// Expand - KDF-Expand
+func (suite *Suite) Expand(prk []byte, info []byte, length uint16) ([]byte, error) {
+	reader := hkdf.Expand(suite.hash, prk, info)
+	out := make([]byte, length)
+	if readNb, err := reader.Read(out); err != nil {
+		return nil, err
+	} else if readNb != int(length) {
+		return nil, errors.New("unable to expand")
+	}
+	return out, nil
+}
+
 func (suite *Suite) labeledExtract(suiteID []byte, salt []byte, label string, ikm []byte) []byte {
 	secret := hpkeVersion[:]
 	secret = append(secret, suiteID...)
 	secret = append(secret, []byte(label)...)
 	secret = append(secret, ikm...)
-	prk := hkdf.Extract(suite.hash, secret, salt)
-	return prk
+	return suite.Extract(secret, salt)
 }
 
 func (suite *Suite) labeledExpand(suiteID []byte, prk []byte, label string, info []byte, length uint16) ([]byte, error) {
@@ -145,14 +161,7 @@ func (suite *Suite) labeledExpand(suiteID []byte, prk []byte, label string, info
 	labeledInfo = append(labeledInfo, suiteID...)
 	labeledInfo = append(labeledInfo, []byte(label)...)
 	labeledInfo = append(labeledInfo, info...)
-	reader := hkdf.Expand(suite.hash, prk, labeledInfo)
-	out := make([]byte, length)
-	if readNb, err := reader.Read(out); err != nil {
-		return nil, err
-	} else if readNb != int(length) {
-		return nil, errors.New("unable to expand")
-	}
-	return out, nil
+	return suite.Expand(prk, labeledInfo, length)
 }
 
 func verifyPskInputs(mode Mode, psk []byte, pskID []byte) error {
