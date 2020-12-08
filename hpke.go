@@ -71,7 +71,7 @@ type Suite struct {
 // NewSuite - Create a new suite from its components
 func NewSuite(kemID KemID, kdfID KdfID, aeadID AeadID) (*Suite, error) {
 	if kemID != KemX25519HkdfSha256 || kdfID != KdfHkdfSha256 {
-		return nil, errors.New("Unimplemented suite")
+		return nil, errors.New("unimplemented suite")
 	}
 	hash := sha256.New
 	var keyBytes, nonceBytes uint16
@@ -86,14 +86,14 @@ func NewSuite(kemID KemID, kdfID KdfID, aeadID AeadID) (*Suite, error) {
 		keyBytes = 0
 		nonceBytes = 0
 	default:
-		return nil, errors.New("Unimplemented suite")
+		return nil, errors.New("unimplemented suite")
 	}
 	var kemHashBytes uint16
 	switch kemID {
 	case KemX25519HkdfSha256:
 		kemHashBytes = 32
 	default:
-		return nil, errors.New("Unimplemented suite")
+		return nil, errors.New("unimplemented suite")
 	}
 	suite := Suite{
 		suiteIDContext: getSuiteIDContext(kemID, kdfID, aeadID),
@@ -140,14 +140,14 @@ func (suite *Suite) labeledExpand(suiteID []byte, prk []byte, label string, info
 	if readNb, err := reader.Read(out); err != nil {
 		return nil, err
 	} else if readNb != int(length) {
-		return nil, errors.New("Unable to expand")
+		return nil, errors.New("unable to expand")
 	}
 	return out, nil
 }
 
 func verifyPskInputs(mode Mode, psk []byte, pskID []byte) error {
 	if (len(psk) == 0) != (len(pskID) == 0) {
-		return errors.New("A PSK and a PSK ID need both to be set")
+		return errors.New("a PSK and a PSK ID need both to be set")
 	}
 	if len(psk) > 0 {
 		if mode == ModeBase || mode == ModeAuth {
@@ -182,6 +182,9 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk []b
 		return Context{}, err
 	}
 	baseNonce, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "base_nonce", keyScheduleContext, suite.nonceBytes)
+	if err != nil {
+		return Context{}, err
+	}
 	counter := make([]byte, suite.nonceBytes)
 	for i := 0; i < len(counter); i++ {
 		counter[i] = 0
