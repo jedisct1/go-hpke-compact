@@ -377,6 +377,18 @@ func (context *Context) NextNonce() []byte {
 	return nonce
 }
 
+// Encrypt - Encrypt and authenticate a message, with optional associated data
+func (context *Context) Encrypt(message []byte, ad []byte) ([]byte, error) {
+	nonce := context.NextNonce()
+	return context.aead.encrypt(nonce, message, ad)
+}
+
+// Decrypt - Verify and decrypt a ciphertext, with optional associated data
+func (context *Context) Decrypt(ciphertext []byte, ad []byte) ([]byte, error) {
+	nonce := context.NextNonce()
+	return context.aead.decrypt(nonce, ciphertext, ad)
+}
+
 type aeadAesImpl struct {
 	impl cipher.AEAD
 }
@@ -397,16 +409,4 @@ func (aead *aeadAesImpl) encrypt(nonce []byte, message []byte, ad []byte) ([]byt
 
 func (aead *aeadAesImpl) decrypt(nonce []byte, ciphertext []byte, ad []byte) ([]byte, error) {
 	return aead.impl.Open(nil, nonce, ciphertext, ad)
-}
-
-// Encrypt - Encrypt and authenticate a message, with optional associated data
-func (context *Context) Encrypt(message []byte, ad []byte) ([]byte, error) {
-	nonce := context.NextNonce()
-	return context.aead.encrypt(nonce, message, ad)
-}
-
-// Decrypt - Verify and decrypt a ciphertext, with optional associated data
-func (context *Context) Decrypt(ciphertext []byte, ad []byte) ([]byte, error) {
-	nonce := context.NextNonce()
-	return context.aead.decrypt(nonce, ciphertext, ad)
 }
