@@ -53,6 +53,8 @@ const (
 	AeadAes128Gcm AeadID = 0x0001
 	// AeadAes256Gcm - AES256-GCM
 	AeadAes256Gcm AeadID = 0x0002
+	// AeadChaCha20Poly1305 - ChaCha20-Poly1305
+	AeadChaCha20Poly1305 AeadID = 0x0003
 	// AeadGeneric - Any unlisted AEAD
 	AeadGeneric AeadID = 0xffff
 )
@@ -81,6 +83,9 @@ func NewSuite(kemID KemID, kdfID KdfID, aeadID AeadID) (*Suite, error) {
 		keyBytes = 16
 		nonceBytes = 12
 	case AeadAes256Gcm:
+		keyBytes = 32
+		nonceBytes = 12
+	case AeadChaCha20Poly1305:
 		keyBytes = 32
 		nonceBytes = 12
 	case AeadGeneric:
@@ -181,6 +186,7 @@ func verifyPskInputs(mode Mode, psk []byte, pskID []byte) error {
 // Context - An AEAD context
 type Context struct {
 	suite          *Suite
+	aead           *aeadAesImpl
 	SharedSecret   []byte
 	ExporterSecret []byte
 	BaseNonce      []byte
@@ -210,8 +216,13 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk []b
 	for i := 0; i < len(counter); i++ {
 		counter[i] = 0
 	}
+	aead, err := newAesAead(sharedSecret)
+	if err != nil {
+		return Context{}, err
+	}
 	return Context{
 		suite:          suite,
+		aead:           aead,
 		SharedSecret:   sharedSecret,
 		ExporterSecret: exporterSecret,
 		BaseNonce:      baseNonce,
@@ -353,6 +364,7 @@ func (context *Context) incrementCounter() error {
 }
 
 // NextNonce - Get the next nonce to encrypt/decrypt a message with an AEAD
+// This is not thread-safe.
 func (context *Context) NextNonce() []byte {
 	if len(context.counter) != len(context.BaseNonce) {
 		panic("Inconsistent nonce length")
@@ -365,35 +377,36 @@ func (context *Context) NextNonce() []byte {
 	return nonce
 }
 
+type aeadAesImpl struct {
+	impl cipher.AEAD
+}
+
+func newAesAead(key []byte) (*aeadAesImpl, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, nil
+	}
+	aesGcm, err := cipher.NewGCM(block)
+	impl := aeadAesImpl{impl: aesGcm}
+	return &impl, err
+}
+
+func (aead *aeadAesImpl) encrypt(nonce []byte, message []byte, ad []byte) ([]byte, error) {
+	return aead.impl.Seal(nil, nonce, message, ad), nil
+}
+
+func (aead *aeadAesImpl) decrypt(nonce []byte, ciphertext []byte, ad []byte) ([]byte, error) {
+	return aead.impl.Open(nil, nonce, ciphertext, ad)
+}
+
 // Encrypt - Encrypt and authenticate a message, with optional associated data
-func (context *Context) Encrypt(ad []byte, message []byte) ([]byte, error) {
-	block, err := aes.NewCipher(context.SharedSecret)
-	if err != nil {
-		return nil, err
-	}
+func (context *Context) Encrypt(message []byte, ad []byte) ([]byte, error) {
 	nonce := context.NextNonce()
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	ciphertext := aesgcm.Seal(nil, nonce, message, ad)
-	return ciphertext, nil
+	return context.aead.encrypt(nonce, message, ad)
 }
 
 // Decrypt - Verify and decrypt a ciphertext, with optional associated data
-func (context *Context) Decrypt(ad []byte, ciphertext []byte) ([]byte, error) {
-	block, err := aes.NewCipher(context.SharedSecret)
-	if err != nil {
-		return nil, err
-	}
+func (context *Context) Decrypt(ciphertext []byte, ad []byte) ([]byte, error) {
 	nonce := context.NextNonce()
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	message, err := aesgcm.Open(nil, nonce, ciphertext, ad)
-	if err != nil {
-		return nil, err
-	}
-	return message, nil
+	return context.aead.decrypt(nonce, ciphertext, ad)
 }
