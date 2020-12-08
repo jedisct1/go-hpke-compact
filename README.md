@@ -1,10 +1,10 @@
 # A compact HPKE implemention for Go
 
-`hpkecompact` is a small implementation of the [Hybrid Public Key Encryption](https://www.ietf.org/archive/id/draft-irtf-cfrg-hpke-06.html) draft.
+`hpkecompact` is a small implementation of the [Hybrid Public Key Encryption](https://www.ietf.org/archive/id/draft-irtf-cfrg-hpke-06.html) (HPKE) draft.
 
 It fits in a single file and only uses the Go standard library and `x/crypto`.
 
-Suites are currently limited to `X25519-HKDF-SHA256/HKDF-SHA-256/AES-GCM`; these are very likely to be the most commonly deployed ones in a forseable future.
+Suites are currently limited to `X25519-HKDF-SHA256/HKDF-SHA-256/AES-GCM`; these are very likely to be the most commonly deployed ones for a forseable future.
 
 ## Usage
 
