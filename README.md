@@ -28,7 +28,8 @@ clientCtx, encryptedSharedSecret, err :=
 ```
 
 * `encryptedSharedSecret` needs to be sent to the server.
-* `clientCtx` can be used to encrypt/decrypt messages exchanged with the server
+* `clientCtx` can be used to encrypt/decrypt messages exchanged with the server.
+* The last parameter is an optional pre-shared key (`PSK` type).
 
 ### Server: decapsulation of the shared secret
 
@@ -38,6 +39,7 @@ serverCtx, err := suite.NewServerContext(encryptedSharedSecret,
 ```
 
 * `serverCtx` can be used to encrypt/decrypt messages exchanged with the client
+* The last parameter is an optional pre-shared key (`PSK` type).
 
 ### Encryption of a message
 
@@ -53,4 +55,4 @@ Nonces are automatically incremented, so it is safe to call this function multip
 decrypted, err := serverCtx.Decrypt(nil, ciphertext)
 ```
 
-## That's it!
+## There's more!
