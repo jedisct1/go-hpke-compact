@@ -80,14 +80,12 @@ Just replace `NewClientContext()` with `NewAuthenticatedClientContext()` and `Ne
 clientKp, err := suite.GenerateKeyPair()
 serverKp, err := suite.GenerateKeyPair()
 
-clientCtx, encryptedSharedSecret, err :=
-    suite.NewAuthenticatedClientContext(clientKp, serverKp.PublicKey,
-        []byte("application name"), psk)
+clientCtx, encryptedSharedSecret, err := suite.NewAuthenticatedClientContext(
+    clientKp, serverKp.PublicKey, []byte("application name"), psk)
 
-serverCtx, err :=
-    suite.NewAuthenticatedServerContext(clientKp.PublicKey,
-        encryptedSharedSecret, serverKp,
-        []byte("application name"), psk)
+serverCtx, err := suite.NewAuthenticatedServerContext(
+    clientKp.PublicKey, encryptedSharedSecret, serverKp,
+    []byte("application name"), psk)
 ```
 
 ## That's it!
