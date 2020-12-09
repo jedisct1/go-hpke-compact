@@ -32,7 +32,7 @@ clientCtx, encryptedSharedSecret, err :=
 
 * `encryptedSharedSecret` needs to be sent to the server.
 * `clientCtx` can be used to encrypt/decrypt messages exchanged with the server.
-* The last parameter is an optional pre-shared key (`PSK` type).
+* The last parameter is an optional pre-shared key (`Psk` type).
 
 ### Server: decapsulation of the shared secret
 
@@ -42,7 +42,7 @@ serverCtx, err := suite.NewServerContext(encryptedSharedSecret,
 ```
 
 * `serverCtx` can be used to encrypt/decrypt messages exchanged with the client
-* The last parameter is an optional pre-shared key (`PSK` type).
+* The last parameter is an optional pre-shared key (`Psk` type).
 
 ### Encryption of a message
 

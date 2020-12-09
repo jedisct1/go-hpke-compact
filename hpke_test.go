@@ -47,6 +47,49 @@ func TestExchange(t *testing.T) {
 	}
 }
 
+func TestAuthenticatedExchange(t *testing.T) {
+	suite, err := NewSuite(KemX25519HkdfSha256, KdfHkdfSha256, AeadChaCha20Poly1305)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clientKp, err := suite.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	serverKp, err := suite.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	psk := &Psk{ID: []byte("PSK ID"), Key: []byte("PSK key")}
+
+	clientCtx, encryptedSharedSecret, err := suite.NewAuthenticatedClientContext(clientKp, serverKp.PublicKey, []byte("test"), psk)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	serverCtx, err := suite.NewAuthenticatedServerContext(clientKp.PublicKey, encryptedSharedSecret, serverKp, []byte("test"), psk)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ciphertext, err := clientCtx.Encrypt([]byte("message"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decrypted, err := serverCtx.Decrypt(ciphertext, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(decrypted) != "message" {
+		t.Fatal("Unexpected decryption result")
+	}
+}
+
 func TestVectors(t *testing.T) {
 	ctx, err := NewSuite(KemX25519HkdfSha256, KdfHkdfSha256, AeadAes128Gcm)
 	if err != nil {

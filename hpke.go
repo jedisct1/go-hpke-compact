@@ -60,8 +60,8 @@ const (
 	AeadGeneric AeadID = 0xffff
 )
 
-// PSK - Pre-shared key and key ID
-type PSK struct {
+// Psk - Pre-shared key and key ID
+type Psk struct {
 	Key []byte
 	ID  []byte
 }
@@ -184,7 +184,7 @@ func (suite *Suite) labeledExpand(suiteID []byte, prk []byte, label string, info
 	return suite.Expand(prk, labeledInfo, length)
 }
 
-func verifyPskInputs(mode Mode, psk *PSK) error {
+func verifyPskInputs(mode Mode, psk *Psk) error {
 	if psk != nil && ((len(psk.Key) == 0) != (len(psk.ID) == 0)) {
 		return errors.New("a PSK and a PSK ID need both to be set")
 	}
@@ -208,12 +208,12 @@ type Context struct {
 	counter        []byte
 }
 
-func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk *PSK) (Context, error) {
+func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk *Psk) (Context, error) {
 	if err := verifyPskInputs(mode, psk); err != nil {
 		return Context{}, err
 	}
 	if psk == nil {
-		psk = &PSK{}
+		psk = &Psk{}
 	}
 	pskIDHash := suite.labeledExtract(suite.suiteIDContext[:], nil, "psk_id_hash", psk.ID)
 	infoHash := suite.labeledExtract(suite.suiteIDContext[:], nil, "info_hash", info)
@@ -376,7 +376,7 @@ func (suite *Suite) authDecap(ephPk []byte, serverKp KeyPair, clientPk []byte) (
 }
 
 // NewClientContext - Create a new context for a client (aka "sender")
-func (suite *Suite) NewClientContext(serverPk []byte, info []byte, psk *PSK) (Context, []byte, error) {
+func (suite *Suite) NewClientContext(serverPk []byte, info []byte, psk *Psk) (Context, []byte, error) {
 	dhSecret, enc, err := suite.encap(serverPk, nil)
 	if err != nil {
 		return Context{}, nil, err
@@ -393,7 +393,7 @@ func (suite *Suite) NewClientContext(serverPk []byte, info []byte, psk *PSK) (Co
 }
 
 // NewClientDeterministicContext - Create a new deterministic context for a client - Should only be used for testing purposes
-func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, psk *PSK, seed []byte) (Context, []byte, error) {
+func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, psk *Psk, seed []byte) (Context, []byte, error) {
 	dhSecret, enc, err := suite.encap(serverPk, seed)
 	if err != nil {
 		return Context{}, nil, err
@@ -410,7 +410,7 @@ func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, 
 }
 
 // NewServerContext - Create a new context for a server (aka "recipient")
-func (suite *Suite) NewServerContext(enc []byte, serverKp KeyPair, info []byte, psk *PSK) (Context, error) {
+func (suite *Suite) NewServerContext(enc []byte, serverKp KeyPair, info []byte, psk *Psk) (Context, error) {
 	dhSecret, err := suite.decap(enc, serverKp)
 	if err != nil {
 		return Context{}, err
@@ -427,7 +427,7 @@ func (suite *Suite) NewServerContext(enc []byte, serverKp KeyPair, info []byte, 
 }
 
 // NewAuthenticatedClientContext - Create a new context for a client (aka "sender"), with authentication
-func (suite *Suite) NewAuthenticatedClientContext(clientKp KeyPair, serverPk []byte, info []byte, psk *PSK) (Context, []byte, error) {
+func (suite *Suite) NewAuthenticatedClientContext(clientKp KeyPair, serverPk []byte, info []byte, psk *Psk) (Context, []byte, error) {
 	dhSecret, enc, err := suite.authEncap(serverPk, clientKp, nil)
 	if err != nil {
 		return Context{}, nil, err
@@ -444,7 +444,7 @@ func (suite *Suite) NewAuthenticatedClientContext(clientKp KeyPair, serverPk []b
 }
 
 // NewAuthenticatedClientDeterministicContext - Create a new deterministic context for a client, with authentication - Should only be used for testing purposes
-func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientKp KeyPair, serverPk []byte, info []byte, psk *PSK, seed []byte) (Context, []byte, error) {
+func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientKp KeyPair, serverPk []byte, info []byte, psk *Psk, seed []byte) (Context, []byte, error) {
 	dhSecret, enc, err := suite.authEncap(serverPk, clientKp, seed)
 	if err != nil {
 		return Context{}, nil, err
@@ -461,7 +461,7 @@ func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientKp KeyPair,
 }
 
 // NewAuthenticatedServerContext - Create a new context for a server (aka "recipient"), with authentication
-func (suite *Suite) NewAuthenticatedServerContext(clientPk []byte, enc []byte, serverKp KeyPair, info []byte, psk *PSK) (Context, error) {
+func (suite *Suite) NewAuthenticatedServerContext(clientPk []byte, enc []byte, serverKp KeyPair, info []byte, psk *Psk) (Context, error) {
 	dhSecret, err := suite.authDecap(enc, serverKp, clientPk)
 	if err != nil {
 		return Context{}, err
