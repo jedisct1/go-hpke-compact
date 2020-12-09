@@ -79,17 +79,15 @@ func NewSuite(kemID KemID, kdfID KdfID, aeadID AeadID) (*Suite, error) {
 		return nil, errors.New("unimplemented suite")
 	}
 	hash := sha256.New
-	var keyBytes, nonceBytes uint16
+	nonceBytes := 12
+	var keyBytes uint16
 	switch aeadID {
 	case AeadAes128Gcm:
 		keyBytes = 16
-		nonceBytes = 12
 	case AeadAes256Gcm:
 		keyBytes = 32
-		nonceBytes = 12
 	case AeadChaCha20Poly1305:
 		keyBytes = 32
-		nonceBytes = 12
 	case AeadGeneric:
 		keyBytes = 0
 		nonceBytes = 0
@@ -375,7 +373,7 @@ func (context *Context) incrementCounter() error {
 }
 
 // NextNonce - Get the next nonce to encrypt/decrypt a message with an AEAD
-// This is not thread-safe.
+// Note: this is not thread-safe.
 func (context *Context) NextNonce() []byte {
 	if len(context.counter) != len(context.BaseNonce) {
 		panic("Inconsistent nonce length")
