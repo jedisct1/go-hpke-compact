@@ -66,6 +66,14 @@ type PSK struct {
 	ID  []byte
 }
 
+// KeyPair - A key pair (packed as a byte string)
+type KeyPair struct {
+	// PublicKey - Public key
+	PublicKey []byte
+	// SecretKey - Secret key
+	SecretKey []byte
+}
+
 // Suite - HPKE suite
 type Suite struct {
 	suiteIDContext [10]byte
@@ -246,27 +254,27 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk *PS
 }
 
 // GenerateKeyPair - Generate a random key pair
-func (suite *Suite) GenerateKeyPair() ([]byte, []byte, error) {
+func (suite *Suite) GenerateKeyPair() (KeyPair, error) {
 	var pk, sk [32]byte
 	if _, err := crypto_rand.Read(sk[:]); err != nil {
-		return nil, nil, err
+		return KeyPair{}, err
 	}
 	curve25519.ScalarBaseMult(&pk, &sk)
-	return pk[:], sk[:], nil
+	return KeyPair{PublicKey: pk[:], SecretKey: sk[:]}, nil
 }
 
 // DeterministicKeyPair - Derive a deterministic key pair from a seed
-func (suite *Suite) DeterministicKeyPair(seed []byte) ([]byte, []byte, error) {
+func (suite *Suite) DeterministicKeyPair(seed []byte) (KeyPair, error) {
 	var pk, sk [32]byte
 	prk := suite.labeledExtract(suite.suiteIDKEM[:], nil, "dkp_prk", seed)
 	xsk, err := suite.labeledExpand(suite.suiteIDKEM[:], prk, "sk", nil, 32)
 	if err != nil {
-		return nil, nil, err
+		return KeyPair{}, err
 	}
 	copy(sk[:], xsk)
 
 	curve25519.ScalarBaseMult(&pk, &sk)
-	return pk[:], sk[:], nil
+	return KeyPair{PublicKey: pk[:], SecretKey: sk[:]}, nil
 }
 
 func (suite *Suite) dh(pk []byte, sk []byte) ([]byte, error) {
@@ -287,34 +295,34 @@ func (suite *Suite) extractAndExpandDH(dh []byte, kemContext []byte) ([]byte, er
 }
 
 func (suite *Suite) encap(serverPk []byte, seed []byte) ([]byte, []byte, error) {
-	var ephPk, ephSk []byte
+	var ephKp KeyPair
 	var err error
 	if len(seed) > 0 {
-		ephPk, ephSk, err = suite.DeterministicKeyPair(seed)
+		ephKp, err = suite.DeterministicKeyPair(seed)
 	} else {
-		ephPk, ephSk, err = suite.GenerateKeyPair()
+		ephKp, err = suite.GenerateKeyPair()
 	}
 	if err != nil {
 		return nil, nil, err
 	}
-	dh, err := suite.dh(serverPk, ephSk)
+	dh, err := suite.dh(serverPk, ephKp.SecretKey)
 	if err != nil {
 		return nil, nil, err
 	}
-	kemContext := append(ephPk, serverPk...)
+	kemContext := append(ephKp.PublicKey, serverPk...)
 	dhSecret, err := suite.extractAndExpandDH(dh, kemContext)
 	if err != nil {
 		return nil, nil, err
 	}
-	return dhSecret, ephPk, nil
+	return dhSecret, ephKp.PublicKey, nil
 }
 
-func (suite *Suite) decap(ephPk []byte, serverPk []byte, serverSk []byte) ([]byte, error) {
-	dh, err := suite.dh(ephPk, serverSk)
+func (suite *Suite) decap(ephPk []byte, serverKp KeyPair) ([]byte, error) {
+	dh, err := suite.dh(ephPk, serverKp.SecretKey)
 	if err != nil {
 		return nil, err
 	}
-	kemContext := append(ephPk, serverPk...)
+	kemContext := append(ephPk, serverKp.PublicKey...)
 	dhSecret, err := suite.extractAndExpandDH(dh, kemContext)
 	if err != nil {
 		return nil, err
@@ -322,43 +330,43 @@ func (suite *Suite) decap(ephPk []byte, serverPk []byte, serverSk []byte) ([]byt
 	return dhSecret, nil
 }
 
-func (suite *Suite) authEncap(serverPk []byte, clientPk []byte, clientSk []byte, seed []byte) ([]byte, []byte, error) {
-	var ephPk, ephSk []byte
+func (suite *Suite) authEncap(serverPk []byte, clientKp KeyPair, seed []byte) ([]byte, []byte, error) {
+	var ephKp KeyPair
 	var err error
 	if len(seed) > 0 {
-		ephPk, ephSk, err = suite.DeterministicKeyPair(seed)
+		ephKp, err = suite.DeterministicKeyPair(seed)
 	} else {
-		ephPk, ephSk, err = suite.GenerateKeyPair()
+		ephKp, err = suite.GenerateKeyPair()
 	}
-	dh1, err := suite.dh(serverPk, ephSk)
+	dh1, err := suite.dh(serverPk, ephKp.SecretKey)
 	if err != nil {
 		return nil, nil, err
 	}
-	dh2, err := suite.dh(serverPk, clientSk)
+	dh2, err := suite.dh(serverPk, clientKp.SecretKey)
 	if err != nil {
 		return nil, nil, err
 	}
 	dh := append(dh1, dh2...)
-	kemContext := append(ephPk, serverPk...)
-	kemContext = append(kemContext, clientPk...)
+	kemContext := append(ephKp.PublicKey, serverPk...)
+	kemContext = append(kemContext, clientKp.PublicKey...)
 	dhSecret, err := suite.extractAndExpandDH(dh, kemContext)
 	if err != nil {
 		return nil, nil, err
 	}
-	return dhSecret, ephPk, nil
+	return dhSecret, ephKp.PublicKey, nil
 }
 
-func (suite *Suite) authDecap(ephPk []byte, serverPk []byte, serverSk []byte, clientPk []byte) ([]byte, error) {
-	dh1, err := suite.dh(ephPk, serverSk)
+func (suite *Suite) authDecap(ephPk []byte, serverKp KeyPair, clientPk []byte) ([]byte, error) {
+	dh1, err := suite.dh(ephPk, serverKp.SecretKey)
 	if err != nil {
 		return nil, err
 	}
-	dh2, err := suite.dh(clientPk, serverSk)
+	dh2, err := suite.dh(clientPk, serverKp.SecretKey)
 	if err != nil {
 		return nil, err
 	}
 	dh := append(dh1, dh2...)
-	kemContext := append(ephPk, serverPk...)
+	kemContext := append(ephPk, serverKp.PublicKey...)
 	kemContext = append(kemContext, clientPk...)
 	dhSecret, err := suite.extractAndExpandDH(dh, kemContext)
 	if err != nil {
@@ -402,8 +410,8 @@ func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, 
 }
 
 // NewServerContext - Create a new context for a server (aka "recipient")
-func (suite *Suite) NewServerContext(enc []byte, serverPk []byte, serverSk []byte, info []byte, psk *PSK) (Context, error) {
-	dhSecret, err := suite.decap(enc, serverPk, serverSk)
+func (suite *Suite) NewServerContext(enc []byte, serverKp KeyPair, info []byte, psk *PSK) (Context, error) {
+	dhSecret, err := suite.decap(enc, serverKp)
 	if err != nil {
 		return Context{}, err
 	}
@@ -419,8 +427,8 @@ func (suite *Suite) NewServerContext(enc []byte, serverPk []byte, serverSk []byt
 }
 
 // NewAuthenticatedClientContext - Create a new context for a client (aka "sender"), with authentication
-func (suite *Suite) NewAuthenticatedClientContext(clientPk []byte, clientSk []byte, serverPk []byte, info []byte, psk *PSK) (Context, []byte, error) {
-	dhSecret, enc, err := suite.authEncap(serverPk, clientPk, clientSk, nil)
+func (suite *Suite) NewAuthenticatedClientContext(clientKp KeyPair, serverPk []byte, info []byte, psk *PSK) (Context, []byte, error) {
+	dhSecret, enc, err := suite.authEncap(serverPk, clientKp, nil)
 	if err != nil {
 		return Context{}, nil, err
 	}
@@ -436,8 +444,8 @@ func (suite *Suite) NewAuthenticatedClientContext(clientPk []byte, clientSk []by
 }
 
 // NewAuthenticatedClientDeterministicContext - Create a new deterministic context for a client, with authentication - Should only be used for testing purposes
-func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientPk []byte, clientSk []byte, serverPk []byte, info []byte, psk *PSK, seed []byte) (Context, []byte, error) {
-	dhSecret, enc, err := suite.authEncap(serverPk, clientPk, clientSk, seed)
+func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientKp KeyPair, serverPk []byte, info []byte, psk *PSK, seed []byte) (Context, []byte, error) {
+	dhSecret, enc, err := suite.authEncap(serverPk, clientKp, seed)
 	if err != nil {
 		return Context{}, nil, err
 	}
@@ -453,8 +461,8 @@ func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientPk []byte, 
 }
 
 // NewAuthenticatedServerContext - Create a new context for a server (aka "recipient"), with authentication
-func (suite *Suite) NewAuthenticatedServerContext(clientPk []byte, enc []byte, serverPk []byte, serverSk []byte, info []byte, psk *PSK) (Context, error) {
-	dhSecret, err := suite.authDecap(enc, serverPk, serverSk, clientPk)
+func (suite *Suite) NewAuthenticatedServerContext(clientPk []byte, enc []byte, serverKp KeyPair, info []byte, psk *PSK) (Context, error) {
+	dhSecret, err := suite.authDecap(enc, serverKp, clientPk)
 	if err != nil {
 		return Context{}, err
 	}

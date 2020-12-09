@@ -17,17 +17,17 @@ func TestExchange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	serverPk, serverSk, err := suite.GenerateKeyPair()
+	serverKp, err := suite.GenerateKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	clientCtx, encryptedSharedSecret, err := suite.NewClientContext(serverPk, []byte("test"), nil)
+	clientCtx, encryptedSharedSecret, err := suite.NewClientContext(serverKp.Pk, []byte("test"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	serverCtx, err := suite.NewServerContext(encryptedSharedSecret, serverPk, serverSk, []byte("test"), nil)
+	serverCtx, err := suite.NewServerContext(encryptedSharedSecret, serverKp, []byte("test"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,19 +56,19 @@ func TestVectors(t *testing.T) {
 	info, _ := hex.DecodeString("4f6465206f6e2061204772656369616e2055726e")
 
 	serverSeed, _ := hex.DecodeString("8a219e9a42233826f165d2c1036399fa84cfb3bcb93872bc49287dfbe6f1fec9")
-	serverPk, serverSk, err := ctx.DeterministicKeyPair(serverSeed)
+	serverKp, err := ctx.DeterministicKeyPair(serverSeed)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hexEqual(serverSk, "490e958c0a0a03ab89cd09e2cb5a2232b30447df71b0288b96eb5d59cab13101") {
+	if !hexEqual(serverKp.Sk, "490e958c0a0a03ab89cd09e2cb5a2232b30447df71b0288b96eb5d59cab13101") {
 		t.Fatal("Unexpected serverSk")
 	}
-	if !hexEqual(serverPk, "693e421a7747f0b5cc05716351a9409de672d205f2a178ed70294c7afad22620") {
+	if !hexEqual(serverKp.Pk, "693e421a7747f0b5cc05716351a9409de672d205f2a178ed70294c7afad22620") {
 		t.Fatal("Unexpected serverPk")
 	}
 
 	clientSeed, _ := hex.DecodeString("591c66abd531b9c8287cf76ac053efba38d61e994e7f656c30dab6723a8af9ce")
-	clientCtx, encryptedSharedSecret, err := ctx.NewClientDeterministicContext(serverPk, info, nil, clientSeed)
+	clientCtx, encryptedSharedSecret, err := ctx.NewClientDeterministicContext(serverKp.Pk, info, nil, clientSeed)
 	if err != nil {
 		t.Fatal(err)
 	}

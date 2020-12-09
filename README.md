@@ -17,14 +17,14 @@ suite, err := NewSuite(KemX25519HkdfSha256, KdfHkdfSha256, AeadAes128Gcm)
 ### Server key pair creation
 
 ```go
-serverPk, serverSk, err := ctx.GenerateKeyPair()
+serverKp, err := ctx.GenerateKeyPair()
 ```
 
 ### Client: creation and encapsulation of the shared secret
 
 ```go
 clientCtx, encryptedSharedSecret, err :=
-    suite.NewClientContext(serverPk, []byte("application name"), nil)
+    suite.NewClientContext(serverKp.PublicKey, []byte("application name"), nil)
 ```
 
 * `encryptedSharedSecret` needs to be sent to the server.
@@ -35,7 +35,7 @@ clientCtx, encryptedSharedSecret, err :=
 
 ```go
 serverCtx, err := suite.NewServerContext(encryptedSharedSecret,
-    serverPk, serverSk, []byte("application name"), nil)
+    serverKp, []byte("application name"), nil)
 ```
 
 * `serverCtx` can be used to encrypt/decrypt messages exchanged with the client
