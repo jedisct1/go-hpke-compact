@@ -22,7 +22,7 @@ func TestExchange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clientCtx, encryptedSharedSecret, err := suite.NewClientContext(serverKp.Pk, []byte("test"), nil)
+	clientCtx, encryptedSharedSecret, err := suite.NewClientContext(serverKp.PublicKey, []byte("test"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,15 +60,15 @@ func TestVectors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hexEqual(serverKp.Sk, "490e958c0a0a03ab89cd09e2cb5a2232b30447df71b0288b96eb5d59cab13101") {
+	if !hexEqual(serverKp.SecretKey, "490e958c0a0a03ab89cd09e2cb5a2232b30447df71b0288b96eb5d59cab13101") {
 		t.Fatal("Unexpected serverSk")
 	}
-	if !hexEqual(serverKp.Pk, "693e421a7747f0b5cc05716351a9409de672d205f2a178ed70294c7afad22620") {
+	if !hexEqual(serverKp.PublicKey, "693e421a7747f0b5cc05716351a9409de672d205f2a178ed70294c7afad22620") {
 		t.Fatal("Unexpected serverPk")
 	}
 
 	clientSeed, _ := hex.DecodeString("591c66abd531b9c8287cf76ac053efba38d61e994e7f656c30dab6723a8af9ce")
-	clientCtx, encryptedSharedSecret, err := ctx.NewClientDeterministicContext(serverKp.Pk, info, nil, clientSeed)
+	clientCtx, encryptedSharedSecret, err := ctx.NewClientDeterministicContext(serverKp.PublicKey, info, nil, clientSeed)
 	if err != nil {
 		t.Fatal(err)
 	}
