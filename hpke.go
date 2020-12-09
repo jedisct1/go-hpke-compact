@@ -79,7 +79,7 @@ func NewSuite(kemID KemID, kdfID KdfID, aeadID AeadID) (*Suite, error) {
 		return nil, errors.New("unimplemented suite")
 	}
 	hash := sha256.New
-	nonceBytes := 12
+	nonceBytes := uint16(12)
 	var keyBytes uint16
 	switch aeadID {
 	case AeadAes128Gcm:
@@ -306,6 +306,51 @@ func (suite *Suite) decap(ephPk []byte, serverPk []byte, serverSk []byte) ([]byt
 		return nil, err
 	}
 	kemContext := append(ephPk, serverPk...)
+	dhSecret, err := suite.extractAndExpandDH(dh, kemContext)
+	if err != nil {
+		return nil, err
+	}
+	return dhSecret, nil
+}
+
+func (suite *Suite) authEncap(serverPk []byte, clientPk []byte, clientSk []byte, seed []byte) ([]byte, []byte, error) {
+	var ephPk, ephSk []byte
+	var err error
+	if len(seed) > 0 {
+		ephPk, ephSk, err = suite.DeterministicKeyPair(seed)
+	} else {
+		ephPk, ephSk, err = suite.GenerateKeyPair()
+	}
+	dh1, err := suite.dh(serverPk, ephSk)
+	if err != nil {
+		return nil, nil, err
+	}
+	dh2, err := suite.dh(serverPk, clientSk)
+	if err != nil {
+		return nil, nil, err
+	}
+	dh := append(dh1, dh2...)
+	kemContext := append(ephPk, serverPk...)
+	kemContext = append(kemContext, clientPk...)
+	dhSecret, err := suite.extractAndExpandDH(dh, kemContext)
+	if err != nil {
+		return nil, nil, err
+	}
+	return dhSecret, ephPk, nil
+}
+
+func (suite *Suite) authDecap(ephPk []byte, serverPk []byte, serverSk []byte, clientPk []byte) ([]byte, error) {
+	dh1, err := suite.dh(ephPk, serverSk)
+	if err != nil {
+		return nil, err
+	}
+	dh2, err := suite.dh(clientPk, serverSk)
+	if err != nil {
+		return nil, err
+	}
+	dh := append(dh1, dh2...)
+	kemContext := append(ephPk, serverPk...)
+	kemContext = append(kemContext, clientPk...)
 	dhSecret, err := suite.extractAndExpandDH(dh, kemContext)
 	if err != nil {
 		return nil, err
