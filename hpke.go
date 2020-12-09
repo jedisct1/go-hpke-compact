@@ -418,6 +418,57 @@ func (suite *Suite) NewServerContext(enc []byte, serverPk []byte, serverSk []byt
 	return context, nil
 }
 
+// NewAuthenticatedClientContext - Create a new context for a client (aka "sender"), with authentication
+func (suite *Suite) NewAuthenticatedClientContext(clientPk []byte, clientSk []byte, serverPk []byte, info []byte, psk *PSK) (Context, []byte, error) {
+	dhSecret, enc, err := suite.authEncap(serverPk, clientPk, clientSk, nil)
+	if err != nil {
+		return Context{}, nil, err
+	}
+	mode := ModeAuth
+	if psk != nil {
+		mode = ModeAuthPsk
+	}
+	context, err := suite.keySchedule(mode, dhSecret, info, psk)
+	if err != nil {
+		return Context{}, nil, err
+	}
+	return context, enc, nil
+}
+
+// NewAuthenticatedClientDeterministicContext - Create a new deterministic context for a client, with authentication - Should only be used for testing purposes
+func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientPk []byte, clientSk []byte, serverPk []byte, info []byte, psk *PSK, seed []byte) (Context, []byte, error) {
+	dhSecret, enc, err := suite.authEncap(serverPk, clientPk, clientSk, seed)
+	if err != nil {
+		return Context{}, nil, err
+	}
+	mode := ModeAuth
+	if psk != nil {
+		mode = ModeAuthPsk
+	}
+	context, err := suite.keySchedule(mode, dhSecret, info, psk)
+	if err != nil {
+		return Context{}, nil, err
+	}
+	return context, enc, nil
+}
+
+// NewAuthenticatedServerContext - Create a new context for a server (aka "recipient"), with authentication
+func (suite *Suite) NewAuthenticatedServerContext(clientPk []byte, enc []byte, serverPk []byte, serverSk []byte, info []byte, psk *PSK) (Context, error) {
+	dhSecret, err := suite.authDecap(enc, serverPk, serverSk, clientPk)
+	if err != nil {
+		return Context{}, err
+	}
+	mode := ModeAuth
+	if psk != nil {
+		mode = ModeAuthPsk
+	}
+	context, err := suite.keySchedule(mode, dhSecret, info, psk)
+	if err != nil {
+		return Context{}, err
+	}
+	return context, nil
+}
+
 func (context *Context) incrementCounter() error {
 	carry := uint16(1)
 	for i := len(context.counter); ; {
