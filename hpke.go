@@ -214,9 +214,6 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk []b
 		return Context{}, err
 	}
 	counter := make([]byte, suite.nonceBytes)
-	for i := 0; i < len(counter); i++ {
-		counter[i] = 0
-	}
 	var aead aeadImpl
 	switch suite.aeadID {
 	case AeadAes128Gcm, AeadAes256Gcm:
