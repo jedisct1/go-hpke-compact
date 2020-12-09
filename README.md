@@ -24,7 +24,7 @@ serverPk, serverSk, err := ctx.GenerateKeyPair()
 
 ```go
 clientCtx, encryptedSharedSecret, err :=
-    suite.NewClientContext(serverPk, []byte("application name"))
+    suite.NewClientContext(serverPk, []byte("application name"), nil)
 ```
 
 * `encryptedSharedSecret` needs to be sent to the server.
@@ -34,7 +34,7 @@ clientCtx, encryptedSharedSecret, err :=
 
 ```go
 serverCtx, err := suite.NewServerContext(encryptedSharedSecret,
-    serverPk, serverSk, []byte("application name"))
+    serverPk, serverSk, []byte("application name"), nil)
 ```
 
 * `serverCtx` can be used to encrypt/decrypt messages exchanged with the client

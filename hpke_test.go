@@ -22,12 +22,12 @@ func TestExchange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clientCtx, encryptedSharedSecret, err := suite.NewClientContext(serverPk, []byte("test"))
+	clientCtx, encryptedSharedSecret, err := suite.NewClientContext(serverPk, []byte("test"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	serverCtx, err := suite.NewServerContext(encryptedSharedSecret, serverPk, serverSk, []byte("test"))
+	serverCtx, err := suite.NewServerContext(encryptedSharedSecret, serverPk, serverSk, []byte("test"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestVectors(t *testing.T) {
 	}
 
 	clientSeed, _ := hex.DecodeString("591c66abd531b9c8287cf76ac053efba38d61e994e7f656c30dab6723a8af9ce")
-	clientCtx, encryptedSharedSecret, err := ctx.NewClientDeterministicContext(serverPk, info, clientSeed)
+	clientCtx, encryptedSharedSecret, err := ctx.NewClientDeterministicContext(serverPk, info, nil, clientSeed)
 	if err != nil {
 		t.Fatal(err)
 	}

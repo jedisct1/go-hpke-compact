@@ -60,6 +60,12 @@ const (
 	AeadGeneric AeadID = 0xffff
 )
 
+// PSK - Pre-shared key and key ID
+type PSK struct {
+	Key []byte
+	ID  []byte
+}
+
 // Suite - HPKE suite
 type Suite struct {
 	suiteIDContext [10]byte
@@ -170,11 +176,11 @@ func (suite *Suite) labeledExpand(suiteID []byte, prk []byte, label string, info
 	return suite.Expand(prk, labeledInfo, length)
 }
 
-func verifyPskInputs(mode Mode, psk []byte, pskID []byte) error {
-	if (len(psk) == 0) != (len(pskID) == 0) {
+func verifyPskInputs(mode Mode, psk *PSK) error {
+	if psk != nil && ((len(psk.Key) == 0) != (len(psk.ID) == 0)) {
 		return errors.New("a PSK and a PSK ID need both to be set")
 	}
-	if len(psk) > 0 {
+	if psk != nil {
 		if mode == ModeBase || mode == ModeAuth {
 			return errors.New("PSK input provided when not needed")
 		}
@@ -194,16 +200,19 @@ type Context struct {
 	counter        []byte
 }
 
-func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk []byte, pskID []byte) (Context, error) {
-	if err := verifyPskInputs(mode, psk, pskID); err != nil {
+func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk *PSK) (Context, error) {
+	if err := verifyPskInputs(mode, psk); err != nil {
 		return Context{}, err
 	}
-	pskIDHash := suite.labeledExtract(suite.suiteIDContext[:], nil, "psk_id_hash", pskID)
+	if psk == nil {
+		psk = &PSK{}
+	}
+	pskIDHash := suite.labeledExtract(suite.suiteIDContext[:], nil, "psk_id_hash", psk.ID)
 	infoHash := suite.labeledExtract(suite.suiteIDContext[:], nil, "info_hash", info)
 	keyScheduleContext := []byte{byte(mode)}
 	keyScheduleContext = append(keyScheduleContext, pskIDHash...)
 	keyScheduleContext = append(keyScheduleContext, infoHash...)
-	secret := suite.labeledExtract(suite.suiteIDContext[:], dhSecret, "secret", psk)
+	secret := suite.labeledExtract(suite.suiteIDContext[:], dhSecret, "secret", psk.Key)
 	sharedSecret, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "key", keyScheduleContext, suite.KeyBytes)
 	if err != nil {
 		return Context{}, err
@@ -359,12 +368,16 @@ func (suite *Suite) authDecap(ephPk []byte, serverPk []byte, serverSk []byte, cl
 }
 
 // NewClientContext - Create a new context for a client (aka "sender")
-func (suite *Suite) NewClientContext(serverPk []byte, info []byte) (Context, []byte, error) {
+func (suite *Suite) NewClientContext(serverPk []byte, info []byte, psk *PSK) (Context, []byte, error) {
 	dhSecret, enc, err := suite.encap(serverPk, nil)
 	if err != nil {
 		return Context{}, nil, err
 	}
-	context, err := suite.keySchedule(ModeBase, dhSecret, info, nil, nil)
+	mode := ModeBase
+	if psk != nil {
+		mode = ModePsk
+	}
+	context, err := suite.keySchedule(mode, dhSecret, info, psk)
 	if err != nil {
 		return Context{}, nil, err
 	}
@@ -372,12 +385,16 @@ func (suite *Suite) NewClientContext(serverPk []byte, info []byte) (Context, []b
 }
 
 // NewClientDeterministicContext - Create a new deterministic context for a client - Should only be used for testing purposes
-func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, seed []byte) (Context, []byte, error) {
+func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, psk *PSK, seed []byte) (Context, []byte, error) {
 	dhSecret, enc, err := suite.encap(serverPk, seed)
 	if err != nil {
 		return Context{}, nil, err
 	}
-	context, err := suite.keySchedule(ModeBase, dhSecret, info, nil, nil)
+	mode := ModeBase
+	if psk != nil {
+		mode = ModePsk
+	}
+	context, err := suite.keySchedule(mode, dhSecret, info, psk)
 	if err != nil {
 		return Context{}, nil, err
 	}
@@ -385,12 +402,16 @@ func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, 
 }
 
 // NewServerContext - Create a new context for a server (aka "recipient")
-func (suite *Suite) NewServerContext(enc []byte, serverPk []byte, serverSk []byte, info []byte) (Context, error) {
+func (suite *Suite) NewServerContext(enc []byte, serverPk []byte, serverSk []byte, info []byte, psk *PSK) (Context, error) {
 	dhSecret, err := suite.decap(enc, serverPk, serverSk)
 	if err != nil {
 		return Context{}, err
 	}
-	context, err := suite.keySchedule(ModeBase, dhSecret, info, nil, nil)
+	mode := ModeBase
+	if psk != nil {
+		mode = ModePsk
+	}
+	context, err := suite.keySchedule(mode, dhSecret, info, psk)
 	if err != nil {
 		return Context{}, err
 	}
