@@ -11,13 +11,7 @@ Suites are currently limited to `X25519-HKDF-SHA256` / `HKDF-SHA-256` / `{AES-{1
 
 ## Important
 
-Encryption using HPKE *MUST* be one-way only.
-
-A client can encrypt data for a server to decrypt *OR* the other way round.
-
-Unless half-duplex operation is guaranteed, encrypting on both sides will cause nonces to repeat, with serious security implications when using the AEADs supported by HPKE.
-
-If you need to communicate both ways, creating two contexts, where each party simultaneously act as a client and a server, is necessary.
+Parties must take turn in order to encrypt messages. A party should never encrypt new messages before having decrypted all the messages from the other party.
 
 ## Usage
 
