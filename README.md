@@ -9,6 +9,14 @@ It fits in a single file and only uses the Go standard library and `x/crypto`.
 
 Suites are currently limited to `X25519-HKDF-SHA256` / `HKDF-SHA-256` / `{AES-{128,256}-GCM, CHACHA20-POLY1305}`; these are very likely to be the most commonly deployed ones for a forseable future.
 
+## Important
+
+Encryption using HPKE *MUST* be one-way only.
+
+A client can encrypt data for a server to decrypt *OR* the other way round.
+
+Encrypting on both sides will cause nonces to repeat.
+
 ## Usage
 
 ### Suite instantiation
@@ -17,13 +25,15 @@ Suites are currently limited to `X25519-HKDF-SHA256` / `HKDF-SHA-256` / `{AES-{1
 suite, err := NewSuite(KemX25519HkdfSha256, KdfHkdfSha256, AeadAes128Gcm)
 ```
 
-### Server key pair creation
+### Key pair creation
 
 ```go
 serverKp, err := ctx.GenerateKeyPair()
 ```
 
 ### Client: creation and encapsulation of the shared secret
+
+A _client_ initiates a connexion by sending an encrypted secret; a _server_ accepts an encrypted secret from a client, and decrypts it, so that both parties have a shared secret they can use for encryption.
 
 ```go
 clientCtx, encryptedSharedSecret, err :=
