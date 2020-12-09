@@ -226,6 +226,9 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk *Ps
 		return Context{}, err
 	}
 	exporterSecret, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "exp", keyScheduleContext, suite.prkBytes)
+	if err != nil {
+		return Context{}, err
+	}
 	baseNonce, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "base_nonce", keyScheduleContext, suite.nonceBytes)
 	if err != nil {
 		return Context{}, err
@@ -337,6 +340,9 @@ func (suite *Suite) authEncap(serverPk []byte, clientKp KeyPair, seed []byte) ([
 		ephKp, err = suite.DeterministicKeyPair(seed)
 	} else {
 		ephKp, err = suite.GenerateKeyPair()
+	}
+	if err != nil {
+		return nil, nil, err
 	}
 	dh1, err := suite.dh(serverPk, ephKp.SecretKey)
 	if err != nil {
@@ -534,6 +540,9 @@ func newAesAead(key []byte) (aeadAesImpl, error) {
 		return aeadAesImpl{}, nil
 	}
 	aesGcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return aeadAesImpl{}, nil
+	}
 	aead := aeadAesImpl{impl: aesGcm}
 	return aead, nil
 }
