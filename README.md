@@ -4,7 +4,7 @@
 
 It fits in a single file and only uses the Go standard library and `x/crypto`.
 
-Suites are currently limited to `X25519-HKDF-SHA256/HKDF-SHA-256/AES-{128,256}-GCM`; these are very likely to be the most commonly deployed ones for a forseable future.
+Suites are currently limited to `X25519-HKDF-SHA256` / `HKDF-SHA-256` / `{AES-{128,256}-GCM, CHACHA20-POLY1305}`; these are very likely to be the most commonly deployed ones for a forseable future.
 
 ## Usage
 

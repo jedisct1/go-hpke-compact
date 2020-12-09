@@ -9,6 +9,7 @@ import (
 	"errors"
 	"hash"
 
+	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
 )
@@ -69,6 +70,7 @@ type Suite struct {
 	KeyBytes     uint16
 	nonceBytes   uint16
 	kemHashBytes uint16
+	aeadID       AeadID
 }
 
 // NewSuite - Create a new suite from its components
@@ -116,6 +118,7 @@ func NewSuite(kemID KemID, kdfID KdfID, aeadID AeadID) (*Suite, error) {
 		prkBytes:       prkBytes,
 		nonceBytes:     nonceBytes,
 		kemHashBytes:   kemHashBytes,
+		aeadID:         aeadID,
 	}
 	return &suite, nil
 }
@@ -186,7 +189,7 @@ func verifyPskInputs(mode Mode, psk []byte, pskID []byte) error {
 // Context - An AEAD context
 type Context struct {
 	suite          *Suite
-	aead           *aeadAesImpl
+	aead           aeadImpl
 	SharedSecret   []byte
 	ExporterSecret []byte
 	BaseNonce      []byte
@@ -216,7 +219,15 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk []b
 	for i := 0; i < len(counter); i++ {
 		counter[i] = 0
 	}
-	aead, err := newAesAead(sharedSecret)
+	var aead aeadImpl
+	switch suite.aeadID {
+	case AeadAes128Gcm, AeadAes256Gcm:
+		aead, err = newAesAead(sharedSecret)
+	case AeadChaCha20Poly1305:
+		aead, err = newChaChaPolyAead(sharedSecret)
+	default:
+		return Context{}, errors.New("unimplemented AEAD")
+	}
 	if err != nil {
 		return Context{}, err
 	}
@@ -380,33 +391,50 @@ func (context *Context) NextNonce() []byte {
 // Encrypt - Encrypt and authenticate a message, with optional associated data
 func (context *Context) Encrypt(message []byte, ad []byte) ([]byte, error) {
 	nonce := context.NextNonce()
-	return context.aead.encrypt(nonce, message, ad)
+	return context.aead.internal().Seal(nil, nonce, message, ad), nil
 }
 
 // Decrypt - Verify and decrypt a ciphertext, with optional associated data
 func (context *Context) Decrypt(ciphertext []byte, ad []byte) ([]byte, error) {
 	nonce := context.NextNonce()
-	return context.aead.decrypt(nonce, ciphertext, ad)
+	return context.aead.internal().Open(nil, nonce, ciphertext, ad)
+}
+
+type aeadImpl interface {
+	internal() cipher.AEAD
 }
 
 type aeadAesImpl struct {
 	impl cipher.AEAD
 }
 
-func newAesAead(key []byte) (*aeadAesImpl, error) {
+func newAesAead(key []byte) (aeadAesImpl, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, nil
+		return aeadAesImpl{}, nil
 	}
 	aesGcm, err := cipher.NewGCM(block)
-	impl := aeadAesImpl{impl: aesGcm}
-	return &impl, err
+	aead := aeadAesImpl{impl: aesGcm}
+	return aead, nil
 }
 
-func (aead *aeadAesImpl) encrypt(nonce []byte, message []byte, ad []byte) ([]byte, error) {
-	return aead.impl.Seal(nil, nonce, message, ad), nil
+func (aead aeadAesImpl) internal() cipher.AEAD {
+	return aead.impl
 }
 
-func (aead *aeadAesImpl) decrypt(nonce []byte, ciphertext []byte, ad []byte) ([]byte, error) {
-	return aead.impl.Open(nil, nonce, ciphertext, ad)
+type aeadChaChaPolyImpl struct {
+	impl cipher.AEAD
+}
+
+func newChaChaPolyAead(key []byte) (aeadChaChaPolyImpl, error) {
+	impl, err := chacha20poly1305.New(key)
+	if err != nil {
+		return aeadChaChaPolyImpl{}, nil
+	}
+	aead := aeadChaChaPolyImpl{impl: impl}
+	return aead, nil
+}
+
+func (aead aeadChaChaPolyImpl) internal() cipher.AEAD {
+	return aead.impl
 }
