@@ -55,4 +55,18 @@ Nonces are automatically incremented, so it is safe to call this function multip
 decrypted, err := serverCtx.Decrypt(nil, ciphertext)
 ```
 
-## There's more!
+### Exporter secret
+
+The exporter secret is directly accessible from the `Context` structure:
+
+```go
+exporter := serverCtx.ExporterSecret
+```
+
+## Authenticated modes
+
+Authenticated modes, with or without a PSK are supported.
+
+Just replace `NewClientContext()` with `NewAuthenticatedClientContext()` and `NewServerContext()` with `NewAuthenticatedServerContext()` for authentication.
+
+## That's it!
