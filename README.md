@@ -81,11 +81,10 @@ clientKp, err := suite.GenerateKeyPair()
 serverKp, err := suite.GenerateKeyPair()
 
 clientCtx, encryptedSharedSecret, err := suite.NewAuthenticatedClientContext(
-    clientKp, serverKp.PublicKey, []byte("application name"), psk)
+    clientKp, serverKp.PublicKey, []byte("app"), psk)
 
 serverCtx, err := suite.NewAuthenticatedServerContext(
-    clientKp.PublicKey, encryptedSharedSecret, serverKp,
-    []byte("application name"), psk)
+    clientKp.PublicKey, encryptedSharedSecret, serverKp, []byte("app"), psk)
 ```
 
 ## That's it!
