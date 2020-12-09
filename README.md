@@ -11,7 +11,7 @@ Suites are currently limited to `X25519-HKDF-SHA256` / `HKDF-SHA-256` / `{AES-{1
 
 ## Important
 
-HPKE requires parties to take turn in order to encrypt messages. A party should never encrypt new messages before having decrypted all the messages from the other party.
+HPKE requires parties to take turns in order to encrypt messages. A party should never encrypt new messages before having decrypted all the messages from the other party.
 
 ## Usage
 
