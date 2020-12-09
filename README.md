@@ -47,16 +47,20 @@ serverCtx, err := suite.NewServerContext(encryptedSharedSecret,
 ### Encryption of a message
 
 ```go
-ciphertext, err := clientCtx.Encrypt(nil, []byte("message"))
+ciphertext, err := clientCtx.Encrypt([]byte("message"), nil)
 ```
 
 Nonces are automatically incremented, so it is safe to call this function multiple times within the same context.
 
+Second parameter is optional associated data.
+
 ### Verification and decryption of a ciphertext
 
 ```go
-decrypted, err := serverCtx.Decrypt(nil, ciphertext)
+decrypted, err := serverCtx.Decrypt(ciphertext, nil)
 ```
+
+Second parameter is optional associated data.
 
 ### Exporter secret
 
