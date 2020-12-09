@@ -275,7 +275,6 @@ func (suite *Suite) DeterministicKeyPair(seed []byte) (KeyPair, error) {
 		return KeyPair{}, err
 	}
 	copy(sk[:], xsk)
-
 	curve25519.ScalarBaseMult(&pk, &sk)
 	return KeyPair{PublicKey: pk[:], SecretKey: sk[:]}, nil
 }
