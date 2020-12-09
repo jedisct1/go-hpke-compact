@@ -72,4 +72,18 @@ Authenticated modes, with or without a PSK are supported.
 
 Just replace `NewClientContext()` with `NewAuthenticatedClientContext()` and `NewServerContext()` with `NewAuthenticatedServerContext()` for authentication.
 
+```go
+clientKp, err := suite.GenerateKeyPair()
+serverKp, err := suite.GenerateKeyPair()
+
+clientCtx, encryptedSharedSecret, err :=
+    suite.NewAuthenticatedClientContext(clientKp, serverKp.PublicKey,
+        []byte("application name"), psk)
+
+serverCtx, err :=
+    suite.NewAuthenticatedServerContext(clientKp.PublicKey,
+        encryptedSharedSecret, serverKp,
+        []byte("application name"), psk)
+```
+
 ## That's it!
