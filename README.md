@@ -25,7 +25,7 @@ serverKp, err := ctx.GenerateKeyPair()
 
 ### Client: creation and encapsulation of the shared secret
 
-A _client_ initiates a connexion by sending an encrypted secret; a _server_ accepts an encrypted secret from a client, and decrypts it, so that both parties have a shared secret they can use for encryption.
+A _client_ initiates a connexion by sending an encrypted secret; a _server_ accepts an encrypted secret from a client, and decrypts it, so that both parties can eventually agree on a shared secret.
 
 ```go
 clientCtx, encryptedSharedSecret, err :=
