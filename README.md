@@ -58,6 +58,8 @@ Nonces are automatically incremented, so it is safe to call this function multip
 
 Second parameter is optional associated data.
 
+HPKE only supports unidirectional communications from the client to the server.
+
 ### Decryption of a ciphertext received by the server
 
 The server can decrypt a message received by the client:
