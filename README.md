@@ -70,14 +70,6 @@ decrypted, err := serverCtx.DecryptFromClient(ciphertext, nil)
 
 Second parameter is optional associated data.
 
-### Exporter secret
-
-The exporter secret is directly accessible from the `Context` structure:
-
-```go
-exporter := serverCtx.ExporterSecret
-```
-
 ## Authenticated modes
 
 Authenticated modes, with or without a PSK are supported.
@@ -93,6 +85,14 @@ clientCtx, encryptedSharedSecret, err := suite.NewAuthenticatedClientContext(
 
 serverCtx, err := suite.NewAuthenticatedServerContext(
     clientKp.PublicKey, encryptedSharedSecret, serverKp, []byte("app"), psk)
+```
+
+### Exporter secret
+
+The exporter secret is directly accessible from the `Context` structure:
+
+```go
+exporter := serverCtx.ExporterSecret
 ```
 
 ## That's it!
