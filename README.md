@@ -36,6 +36,8 @@ clientCtx, encryptedSharedSecret, err :=
 * `clientCtx` can be used to encrypt/decrypt messages exchanged with the server.
 * The last parameter is an optional pre-shared key (`Psk` type).
 
+To improve misuse resistance, this implementation uses distinct types for the client and the server context: `ClientContext` for the client, and `ServerContext` for the server.
+
 ### Server: decapsulation of the shared secret
 
 ```go
@@ -89,10 +91,10 @@ serverCtx, err := suite.NewAuthenticatedServerContext(
 
 ### Exporter secret
 
-The exporter secret is directly accessible from the `Context` structure:
+The exporter secret can be obtained with the `ExportedSecret()` function available both in the `ServerContext` and `ClientContext` structures:
 
 ```go
-exporter := serverCtx.ExporterSecret
+exporter := serverCtx.ExporterSecret()
 ```
 
 ## That's it!

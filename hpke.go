@@ -198,20 +198,29 @@ func verifyPskInputs(mode Mode, psk *Psk) error {
 	return nil
 }
 
-// Context - An AEAD context
-type Context struct {
+// innerContext - An AEAD context
+type innerContext struct {
 	suite          *Suite
 	aead           aeadImpl
-	SharedSecret   []byte
-	ExporterSecret []byte
-	BaseNonce      []byte
+	sharedSecret   []byte
+	exporterSecret []byte
+	baseNonce      []byte
 	counter        []byte
-	isSender       bool
 }
 
-func (suite *Suite) keySchedule(isSender bool, mode Mode, dhSecret []byte, info []byte, psk *Psk) (Context, error) {
+// ClientContext - A client encryption context
+type ClientContext struct {
+	inner innerContext
+}
+
+// ServerContext - A server encryption context
+type ServerContext struct {
+	inner innerContext
+}
+
+func (suite *Suite) keySchedule(isSender bool, mode Mode, dhSecret []byte, info []byte, psk *Psk) (innerContext, error) {
 	if err := verifyPskInputs(mode, psk); err != nil {
-		return Context{}, err
+		return innerContext{}, err
 	}
 	if psk == nil {
 		psk = &Psk{}
@@ -224,15 +233,15 @@ func (suite *Suite) keySchedule(isSender bool, mode Mode, dhSecret []byte, info 
 	secret := suite.labeledExtract(suite.suiteIDContext[:], dhSecret, "secret", psk.Key)
 	sharedSecret, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "key", keyScheduleContext, suite.KeyBytes)
 	if err != nil {
-		return Context{}, err
+		return innerContext{}, err
 	}
 	exporterSecret, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "exp", keyScheduleContext, suite.prkBytes)
 	if err != nil {
-		return Context{}, err
+		return innerContext{}, err
 	}
 	baseNonce, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "base_nonce", keyScheduleContext, suite.nonceBytes)
 	if err != nil {
-		return Context{}, err
+		return innerContext{}, err
 	}
 	counter := make([]byte, suite.nonceBytes)
 	var aead aeadImpl
@@ -242,19 +251,18 @@ func (suite *Suite) keySchedule(isSender bool, mode Mode, dhSecret []byte, info 
 	case AeadChaCha20Poly1305:
 		aead, err = newChaChaPolyAead(sharedSecret)
 	default:
-		return Context{}, errors.New("unimplemented AEAD")
+		return innerContext{}, errors.New("unimplemented AEAD")
 	}
 	if err != nil {
-		return Context{}, err
+		return innerContext{}, err
 	}
-	return Context{
+	return innerContext{
 		suite:          suite,
 		aead:           aead,
-		SharedSecret:   sharedSecret,
-		ExporterSecret: exporterSecret,
-		BaseNonce:      baseNonce,
+		sharedSecret:   sharedSecret,
+		exporterSecret: exporterSecret,
+		baseNonce:      baseNonce,
 		counter:        counter,
-		isSender:       isSender,
 	}, nil
 }
 
@@ -383,10 +391,10 @@ func (suite *Suite) authDecap(ephPk []byte, serverKp KeyPair, clientPk []byte) (
 }
 
 // NewClientContext - Create a new context for a client (aka "sender")
-func (suite *Suite) NewClientContext(serverPk []byte, info []byte, psk *Psk) (Context, []byte, error) {
+func (suite *Suite) NewClientContext(serverPk []byte, info []byte, psk *Psk) (ClientContext, []byte, error) {
 	dhSecret, enc, err := suite.encap(serverPk, nil)
 	if err != nil {
-		return Context{}, nil, err
+		return ClientContext{}, nil, err
 	}
 	mode := ModeBase
 	if psk != nil {
@@ -394,16 +402,16 @@ func (suite *Suite) NewClientContext(serverPk []byte, info []byte, psk *Psk) (Co
 	}
 	context, err := suite.keySchedule(true, mode, dhSecret, info, psk)
 	if err != nil {
-		return Context{}, nil, err
+		return ClientContext{}, nil, err
 	}
-	return context, enc, nil
+	return ClientContext{inner: context}, enc, nil
 }
 
 // NewClientDeterministicContext - Create a new deterministic context for a client - Should only be used for testing purposes
-func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, psk *Psk, seed []byte) (Context, []byte, error) {
+func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, psk *Psk, seed []byte) (ClientContext, []byte, error) {
 	dhSecret, enc, err := suite.encap(serverPk, seed)
 	if err != nil {
-		return Context{}, nil, err
+		return ClientContext{}, nil, err
 	}
 	mode := ModeBase
 	if psk != nil {
@@ -411,16 +419,16 @@ func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, 
 	}
 	context, err := suite.keySchedule(true, mode, dhSecret, info, psk)
 	if err != nil {
-		return Context{}, nil, err
+		return ClientContext{}, nil, err
 	}
-	return context, enc, nil
+	return ClientContext{inner: context}, enc, nil
 }
 
 // NewServerContext - Create a new context for a server (aka "recipient")
-func (suite *Suite) NewServerContext(enc []byte, serverKp KeyPair, info []byte, psk *Psk) (Context, error) {
+func (suite *Suite) NewServerContext(enc []byte, serverKp KeyPair, info []byte, psk *Psk) (ServerContext, error) {
 	dhSecret, err := suite.decap(enc, serverKp)
 	if err != nil {
-		return Context{}, err
+		return ServerContext{}, err
 	}
 	mode := ModeBase
 	if psk != nil {
@@ -428,16 +436,16 @@ func (suite *Suite) NewServerContext(enc []byte, serverKp KeyPair, info []byte, 
 	}
 	context, err := suite.keySchedule(false, mode, dhSecret, info, psk)
 	if err != nil {
-		return Context{}, err
+		return ServerContext{}, err
 	}
-	return context, nil
+	return ServerContext{inner: context}, nil
 }
 
 // NewAuthenticatedClientContext - Create a new context for a client (aka "sender"), with authentication
-func (suite *Suite) NewAuthenticatedClientContext(clientKp KeyPair, serverPk []byte, info []byte, psk *Psk) (Context, []byte, error) {
+func (suite *Suite) NewAuthenticatedClientContext(clientKp KeyPair, serverPk []byte, info []byte, psk *Psk) (ClientContext, []byte, error) {
 	dhSecret, enc, err := suite.authEncap(serverPk, clientKp, nil)
 	if err != nil {
-		return Context{}, nil, err
+		return ClientContext{}, nil, err
 	}
 	mode := ModeAuth
 	if psk != nil {
@@ -445,16 +453,16 @@ func (suite *Suite) NewAuthenticatedClientContext(clientKp KeyPair, serverPk []b
 	}
 	context, err := suite.keySchedule(true, mode, dhSecret, info, psk)
 	if err != nil {
-		return Context{}, nil, err
+		return ClientContext{}, nil, err
 	}
-	return context, enc, nil
+	return ClientContext{inner: context}, enc, nil
 }
 
 // NewAuthenticatedClientDeterministicContext - Create a new deterministic context for a client, with authentication - Should only be used for testing purposes
-func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientKp KeyPair, serverPk []byte, info []byte, psk *Psk, seed []byte) (Context, []byte, error) {
+func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientKp KeyPair, serverPk []byte, info []byte, psk *Psk, seed []byte) (ClientContext, []byte, error) {
 	dhSecret, enc, err := suite.authEncap(serverPk, clientKp, seed)
 	if err != nil {
-		return Context{}, nil, err
+		return ClientContext{}, nil, err
 	}
 	mode := ModeAuth
 	if psk != nil {
@@ -462,16 +470,16 @@ func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientKp KeyPair,
 	}
 	context, err := suite.keySchedule(true, mode, dhSecret, info, psk)
 	if err != nil {
-		return Context{}, nil, err
+		return ClientContext{}, nil, err
 	}
-	return context, enc, nil
+	return ClientContext{inner: context}, enc, nil
 }
 
 // NewAuthenticatedServerContext - Create a new context for a server (aka "recipient"), with authentication
-func (suite *Suite) NewAuthenticatedServerContext(clientPk []byte, enc []byte, serverKp KeyPair, info []byte, psk *Psk) (Context, error) {
+func (suite *Suite) NewAuthenticatedServerContext(clientPk []byte, enc []byte, serverKp KeyPair, info []byte, psk *Psk) (ServerContext, error) {
 	dhSecret, err := suite.authDecap(enc, serverKp, clientPk)
 	if err != nil {
-		return Context{}, err
+		return ServerContext{}, err
 	}
 	mode := ModeAuth
 	if psk != nil {
@@ -479,12 +487,12 @@ func (suite *Suite) NewAuthenticatedServerContext(clientPk []byte, enc []byte, s
 	}
 	context, err := suite.keySchedule(false, mode, dhSecret, info, psk)
 	if err != nil {
-		return Context{}, err
+		return ServerContext{}, err
 	}
-	return context, nil
+	return ServerContext{inner: context}, nil
 }
 
-func (context *Context) incrementCounter() error {
+func (context *innerContext) incrementCounter() error {
 	carry := uint16(1)
 	for i := len(context.counter); ; {
 		i--
@@ -503,11 +511,11 @@ func (context *Context) incrementCounter() error {
 
 // NextNonce - Get the next nonce to encrypt/decrypt a message with an AEAD
 // Note: this is not thread-safe.
-func (context *Context) NextNonce() []byte {
-	if len(context.counter) != len(context.BaseNonce) {
+func (context *innerContext) NextNonce() []byte {
+	if len(context.counter) != len(context.baseNonce) {
 		panic("Inconsistent nonce length")
 	}
-	nonce := context.BaseNonce[:]
+	nonce := context.baseNonce[:]
 	for i := 0; i < len(nonce); i++ {
 		nonce[i] ^= context.counter[i]
 	}
@@ -516,21 +524,25 @@ func (context *Context) NextNonce() []byte {
 }
 
 // EncryptToServer - Encrypt and authenticate a message for the server, with optional associated data
-func (context *Context) EncryptToServer(message []byte, ad []byte) ([]byte, error) {
-	if !context.isSender {
-		return nil, errors.New("message can only be encrypted by a client")
-	}
-	nonce := context.NextNonce()
-	return context.aead.internal().Seal(nil, nonce, message, ad), nil
+func (context *ClientContext) EncryptToServer(message []byte, ad []byte) ([]byte, error) {
+	nonce := context.inner.NextNonce()
+	return context.inner.aead.internal().Seal(nil, nonce, message, ad), nil
 }
 
 // DecryptFromClient - Verify and decrypt a ciphertext received from the client, with optional associated data
-func (context *Context) DecryptFromClient(ciphertext []byte, ad []byte) ([]byte, error) {
-	if context.isSender {
-		return nil, errors.New("message can only be decrypted by a server")
-	}
-	nonce := context.NextNonce()
-	return context.aead.internal().Open(nil, nonce, ciphertext, ad)
+func (context *ServerContext) DecryptFromClient(ciphertext []byte, ad []byte) ([]byte, error) {
+	nonce := context.inner.NextNonce()
+	return context.inner.aead.internal().Open(nil, nonce, ciphertext, ad)
+}
+
+// ExporterSecret - Return the exporter secret
+func (context *ClientContext) ExporterSecret() []byte {
+	return context.inner.exporterSecret
+}
+
+// ExporterSecret - Return the exporter secret
+func (context *ServerContext) ExporterSecret() []byte {
+	return context.inner.exporterSecret
 }
 
 type aeadImpl interface {
