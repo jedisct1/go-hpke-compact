@@ -32,12 +32,12 @@ func TestExchange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ciphertext, err := clientCtx.Encrypt([]byte("message"), nil)
+	ciphertext, err := clientCtx.EncryptToServer([]byte("message"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	decrypted, err := serverCtx.Decrypt(ciphertext, nil)
+	decrypted, err := serverCtx.DecryptFromClient(ciphertext, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,12 +75,12 @@ func TestAuthenticatedExchange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ciphertext, err := clientCtx.Encrypt([]byte("message"), nil)
+	ciphertext, err := clientCtx.EncryptToServer([]byte("message"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	decrypted, err := serverCtx.Decrypt(ciphertext, nil)
+	decrypted, err := serverCtx.DecryptFromClient(ciphertext, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,12 +119,12 @@ func TestVectors(t *testing.T) {
 		t.Fatal("Unexpected shared secret")
 	}
 
-	c1, _ := clientCtx.Encrypt([]byte("message"), []byte("ad"))
+	c1, _ := clientCtx.EncryptToServer([]byte("message"), []byte("ad"))
 	if !hexEqual(c1, "24fadb5b67c40fa465fc728b1a3a85121ea9cf525dc26b") {
 		t.Fatal("Unexpected ciphertext")
 	}
 
-	c2, _ := clientCtx.Encrypt([]byte("message"), []byte("ad"))
+	c2, _ := clientCtx.EncryptToServer([]byte("message"), []byte("ad"))
 	if !hexEqual(c2, "ac79f70c02702f923ea7c7edcd61a7996e0b0e59a68ca6") {
 		t.Fatal("Unexpected second ciphertext")
 	}

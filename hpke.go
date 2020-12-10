@@ -206,9 +206,10 @@ type Context struct {
 	ExporterSecret []byte
 	BaseNonce      []byte
 	counter        []byte
+	isSender       bool
 }
 
-func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk *Psk) (Context, error) {
+func (suite *Suite) keySchedule(isSender bool, mode Mode, dhSecret []byte, info []byte, psk *Psk) (Context, error) {
 	if err := verifyPskInputs(mode, psk); err != nil {
 		return Context{}, err
 	}
@@ -253,6 +254,7 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk *Ps
 		ExporterSecret: exporterSecret,
 		BaseNonce:      baseNonce,
 		counter:        counter,
+		isSender:       isSender,
 	}, nil
 }
 
@@ -390,7 +392,7 @@ func (suite *Suite) NewClientContext(serverPk []byte, info []byte, psk *Psk) (Co
 	if psk != nil {
 		mode = ModePsk
 	}
-	context, err := suite.keySchedule(mode, dhSecret, info, psk)
+	context, err := suite.keySchedule(true, mode, dhSecret, info, psk)
 	if err != nil {
 		return Context{}, nil, err
 	}
@@ -407,7 +409,7 @@ func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, 
 	if psk != nil {
 		mode = ModePsk
 	}
-	context, err := suite.keySchedule(mode, dhSecret, info, psk)
+	context, err := suite.keySchedule(true, mode, dhSecret, info, psk)
 	if err != nil {
 		return Context{}, nil, err
 	}
@@ -424,7 +426,7 @@ func (suite *Suite) NewServerContext(enc []byte, serverKp KeyPair, info []byte, 
 	if psk != nil {
 		mode = ModePsk
 	}
-	context, err := suite.keySchedule(mode, dhSecret, info, psk)
+	context, err := suite.keySchedule(false, mode, dhSecret, info, psk)
 	if err != nil {
 		return Context{}, err
 	}
@@ -441,7 +443,7 @@ func (suite *Suite) NewAuthenticatedClientContext(clientKp KeyPair, serverPk []b
 	if psk != nil {
 		mode = ModeAuthPsk
 	}
-	context, err := suite.keySchedule(mode, dhSecret, info, psk)
+	context, err := suite.keySchedule(true, mode, dhSecret, info, psk)
 	if err != nil {
 		return Context{}, nil, err
 	}
@@ -458,7 +460,7 @@ func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientKp KeyPair,
 	if psk != nil {
 		mode = ModeAuthPsk
 	}
-	context, err := suite.keySchedule(mode, dhSecret, info, psk)
+	context, err := suite.keySchedule(true, mode, dhSecret, info, psk)
 	if err != nil {
 		return Context{}, nil, err
 	}
@@ -475,7 +477,7 @@ func (suite *Suite) NewAuthenticatedServerContext(clientPk []byte, enc []byte, s
 	if psk != nil {
 		mode = ModeAuthPsk
 	}
-	context, err := suite.keySchedule(mode, dhSecret, info, psk)
+	context, err := suite.keySchedule(false, mode, dhSecret, info, psk)
 	if err != nil {
 		return Context{}, err
 	}
@@ -513,14 +515,20 @@ func (context *Context) NextNonce() []byte {
 	return nonce
 }
 
-// Encrypt - Encrypt and authenticate a message, with optional associated data
-func (context *Context) Encrypt(message []byte, ad []byte) ([]byte, error) {
+// EncryptToServer - Encrypt and authenticate a message for the server, with optional associated data
+func (context *Context) EncryptToServer(message []byte, ad []byte) ([]byte, error) {
+	if !context.isSender {
+		return nil, errors.New("message can only be encrypted by a client")
+	}
 	nonce := context.NextNonce()
 	return context.aead.internal().Seal(nil, nonce, message, ad), nil
 }
 
-// Decrypt - Verify and decrypt a ciphertext, with optional associated data
-func (context *Context) Decrypt(ciphertext []byte, ad []byte) ([]byte, error) {
+// DecryptFromClient - Verify and decrypt a ciphertext received from the client, with optional associated data
+func (context *Context) DecryptFromClient(ciphertext []byte, ad []byte) ([]byte, error) {
+	if context.isSender {
+		return nil, errors.New("message can only be decrypted by a server")
+	}
 	nonce := context.NextNonce()
 	return context.aead.internal().Open(nil, nonce, ciphertext, ad)
 }

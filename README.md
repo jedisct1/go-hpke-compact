@@ -9,10 +9,6 @@ It fits in a single file and only uses the Go standard library and `x/crypto`.
 
 Suites are currently limited to `X25519-HKDF-SHA256` / `HKDF-SHA-256` / `{AES-{128,256}-GCM, CHACHA20-POLY1305}`; these are very likely to be the most commonly deployed ones for a forseable future.
 
-## Important
-
-HPKE requires parties to take turns in order to encrypt messages. A party should never encrypt new messages before having decrypted all the messages from the other party.
-
 ## Usage
 
 ### Suite instantiation
@@ -50,20 +46,24 @@ serverCtx, err := suite.NewServerContext(encryptedSharedSecret,
 * `serverCtx` can be used to encrypt/decrypt messages exchanged with the client
 * The last parameter is an optional pre-shared key (`Psk` type).
 
-### Encryption of a message
+### Encryption of a message for the server
+
+A message can be encrypted by the client for the server:
 
 ```go
-ciphertext, err := clientCtx.Encrypt([]byte("message"), nil)
+ciphertext, err := clientCtx.EncryptToServer([]byte("message"), nil)
 ```
 
 Nonces are automatically incremented, so it is safe to call this function multiple times within the same context.
 
 Second parameter is optional associated data.
 
-### Verification and decryption of a ciphertext
+### Decryption of a ciphertext received by the server
+
+The server can decrypt a message received by the client:
 
 ```go
-decrypted, err := serverCtx.Decrypt(ciphertext, nil)
+decrypted, err := serverCtx.DecryptFromClient(ciphertext, nil)
 ```
 
 Second parameter is optional associated data.
