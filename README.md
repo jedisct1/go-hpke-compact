@@ -46,7 +46,7 @@ serverCtx, err := suite.NewServerContext(encryptedSharedSecret,
 * `serverCtx` can be used to encrypt/decrypt messages exchanged with the client
 * The last parameter is an optional pre-shared key (`Psk` type).
 
-### Encryption of a message for the server
+### Encryption of a message from the client to the server
 
 A message can be encrypted by the client for the server:
 
