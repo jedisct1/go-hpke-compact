@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
-var hpkeVersion = [7]byte{'H', 'P', 'K', 'E', '-', '0', '6'}
+var hpkeVersion = [7]byte{'H', 'P', 'K', 'E', '-', '0', '7'}
 
 // Mode - Mode
 type Mode byte
@@ -167,8 +167,7 @@ func (suite *Suite) Expand(prk []byte, info []byte, length uint16) ([]byte, erro
 }
 
 func (suite *Suite) labeledExtract(suiteID []byte, salt []byte, label string, ikm []byte) []byte {
-	secret := hpkeVersion[:]
-	secret = append(secret, suiteID...)
+	secret := append(hpkeVersion[:], suiteID...)
 	secret = append(secret, []byte(label)...)
 	secret = append(secret, ikm...)
 	return suite.Extract(secret, salt)
@@ -515,7 +514,8 @@ func (context *innerContext) NextNonce() []byte {
 	if len(context.counter) != len(context.baseNonce) {
 		panic("Inconsistent nonce length")
 	}
-	nonce := context.baseNonce[:]
+	nonce := make([]uint8, len(context.baseNonce))
+	copy(nonce, context.baseNonce)
 	for i := 0; i < len(nonce); i++ {
 		nonce[i] ^= context.counter[i]
 	}
