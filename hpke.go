@@ -56,8 +56,8 @@ const (
 	AeadAes256Gcm AeadID = 0x0002
 	// AeadChaCha20Poly1305 - ChaCha20-Poly1305
 	AeadChaCha20Poly1305 AeadID = 0x0003
-	// AeadGeneric - Any unlisted AEAD
-	AeadGeneric AeadID = 0xffff
+	// AeadExportOnly - Don't use the HPKE encryption API
+	AeadExportOnly AeadID = 0xffff
 )
 
 // Psk - Pre-shared key and key ID
@@ -102,7 +102,7 @@ func NewSuite(kemID KemID, kdfID KdfID, aeadID AeadID) (*Suite, error) {
 		keyBytes = 32
 	case AeadChaCha20Poly1305:
 		keyBytes = 32
-	case AeadGeneric:
+	case AeadExportOnly:
 		keyBytes = 0
 		nonceBytes = 0
 	default:
@@ -230,30 +230,35 @@ func (suite *Suite) keySchedule(isSender bool, mode Mode, dhSecret []byte, info 
 	keyScheduleContext = append(keyScheduleContext, pskIDHash...)
 	keyScheduleContext = append(keyScheduleContext, infoHash...)
 	secret := suite.labeledExtract(suite.suiteIDContext[:], dhSecret, "secret", psk.Key)
-	sharedSecret, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "key", keyScheduleContext, suite.KeyBytes)
-	if err != nil {
-		return innerContext{}, err
-	}
+
 	exporterSecret, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "exp", keyScheduleContext, suite.prkBytes)
 	if err != nil {
 		return innerContext{}, err
 	}
-	baseNonce, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "base_nonce", keyScheduleContext, suite.nonceBytes)
-	if err != nil {
-		return innerContext{}, err
-	}
-	counter := make([]byte, suite.nonceBytes)
+
+	var sharedSecret, baseNonce []byte
 	var aead aeadImpl
-	switch suite.aeadID {
-	case AeadAes128Gcm, AeadAes256Gcm:
-		aead, err = newAesAead(sharedSecret)
-	case AeadChaCha20Poly1305:
-		aead, err = newChaChaPolyAead(sharedSecret)
-	default:
-		return innerContext{}, errors.New("unimplemented AEAD")
-	}
-	if err != nil {
-		return innerContext{}, err
+	counter := make([]byte, suite.nonceBytes)
+	if suite.aeadID != AeadExportOnly {
+		sharedSecret, err = suite.labeledExpand(suite.suiteIDContext[:], secret, "key", keyScheduleContext, suite.KeyBytes)
+		if err != nil {
+			return innerContext{}, err
+		}
+		baseNonce, err = suite.labeledExpand(suite.suiteIDContext[:], secret, "base_nonce", keyScheduleContext, suite.nonceBytes)
+		if err != nil {
+			return innerContext{}, err
+		}
+		switch suite.aeadID {
+		case AeadAes128Gcm, AeadAes256Gcm:
+			aead, err = newAesAead(sharedSecret)
+		case AeadChaCha20Poly1305:
+			aead, err = newChaChaPolyAead(sharedSecret)
+		default:
+			return innerContext{}, errors.New("unimplemented AEAD")
+		}
+		if err != nil {
+			return innerContext{}, err
+		}
 	}
 	return innerContext{
 		suite:          suite,
