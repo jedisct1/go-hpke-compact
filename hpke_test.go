@@ -141,7 +141,35 @@ func TestVectors(t *testing.T) {
 	if !hexEqual(es, "00c3cdacab28e981cc907d12e4f55f0aacae261dbb4eb610447a6bc431bfe2aa") {
 		t.Fatal("Unexpected exported secret")
 	}
+}
 
+func TestExportOnly(t *testing.T) {
+	suite, err := NewSuite(KemX25519HkdfSha256, KdfHkdfSha256, AeadExportOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	serverKp, err := suite.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clientCtx, encryptedSharedSecret, err := suite.NewClientContext(serverKp.PublicKey, []byte("test"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	serverCtx, err := suite.NewServerContext(encryptedSharedSecret, serverKp, []byte("test"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	es := serverCtx.ExporterSecret()
+	for i, x := range clientCtx.ExporterSecret() {
+		if es[i] != x {
+			t.Fatal("Exported secret mismatch")
+		}
+	}
 }
 
 func hexEqual(a []byte, bHex string) bool {
