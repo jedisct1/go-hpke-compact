@@ -514,8 +514,7 @@ func (context *innerContext) NextNonce() []byte {
 	if len(context.counter) != len(context.baseNonce) {
 		panic("Inconsistent nonce length")
 	}
-	nonce := make([]uint8, len(context.baseNonce))
-	copy(nonce, context.baseNonce)
+	nonce := append(context.baseNonce[:0:0], context.baseNonce...)
 	for i := 0; i < len(nonce); i++ {
 		nonce[i] ^= context.counter[i]
 	}
