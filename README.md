@@ -1,6 +1,8 @@
 [![CI status](https://github.com/jedisct1/go-hpke-compact/workflows/Go/badge.svg)](https://github.com/jedisct1/go-hpke-compact/actions)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jedisct1/go-hpke-compact.svg)](https://pkg.go.dev/github.com/jedisct1/go-hpke-compact)
 
+# ![HPKE-Compact](.assets/logo.png)
+
 # A compact HPKE implemention for Go
 
 `hpkecompact` is a small implementation of the [Hybrid Public Key Encryption](https://cfrg.github.io/draft-irtf-cfrg-hpke/draft-irtf-cfrg-hpke.html) (HPKE) draft.
