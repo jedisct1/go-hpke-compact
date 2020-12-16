@@ -214,7 +214,7 @@ func verifyPskInputs(mode Mode, psk *Psk) error {
 			return errors.New("PSK input provided when not needed")
 		}
 	} else if mode == ModePsk || mode == ModeAuthPsk {
-		return errors.New("PRK required for that mode")
+		return errors.New("PSK required for that mode")
 	}
 	return nil
 }
