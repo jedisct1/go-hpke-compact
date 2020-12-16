@@ -129,11 +129,7 @@ func TestVectors(t *testing.T) {
 		t.Fatal("Unexpected second ciphertext")
 	}
 
-	if !hexEqual(clientCtx.inner.sharedSecret, "e20cee1bf5392ad2d3a442e231f187ae") {
-		t.Fatal("Unexpected shared secret")
-	}
-
-	if !hexEqual(clientCtx.inner.baseNonce, "5d99b2f03c452f7a9441933a") {
+	if !hexEqual(clientCtx.inner.outboundState.baseNonce, "5d99b2f03c452f7a9441933a") {
 		t.Fatal("Unexpected base nonce")
 	}
 

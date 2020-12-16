@@ -197,14 +197,18 @@ func verifyPskInputs(mode Mode, psk *Psk) error {
 	return nil
 }
 
+type aeadState struct {
+	aead      aeadImpl
+	baseNonce []byte
+	counter   []byte
+}
+
 // innerContext - An AEAD context
 type innerContext struct {
 	suite          *Suite
-	aead           aeadImpl
-	sharedSecret   []byte
 	exporterSecret []byte
-	baseNonce      []byte
-	counter        []byte
+	outboundState  aeadState
+	inboundState   aeadState
 }
 
 // ClientContext - A client encryption context
@@ -217,7 +221,7 @@ type ServerContext struct {
 	inner innerContext
 }
 
-func (suite *Suite) keySchedule(isSender bool, mode Mode, dhSecret []byte, info []byte, psk *Psk) (innerContext, error) {
+func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk *Psk) (innerContext, error) {
 	if err := verifyPskInputs(mode, psk); err != nil {
 		return innerContext{}, err
 	}
@@ -236,18 +240,18 @@ func (suite *Suite) keySchedule(isSender bool, mode Mode, dhSecret []byte, info 
 		return innerContext{}, err
 	}
 
-	var sharedSecret, baseNonce []byte
-	var aead aeadImpl
 	counter := make([]byte, suite.nonceBytes)
+	var outboundState aeadState
 	if suite.aeadID != AeadExportOnly {
-		sharedSecret, err = suite.labeledExpand(suite.suiteIDContext[:], secret, "key", keyScheduleContext, suite.KeyBytes)
+		sharedSecret, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "key", keyScheduleContext, suite.KeyBytes)
 		if err != nil {
 			return innerContext{}, err
 		}
-		baseNonce, err = suite.labeledExpand(suite.suiteIDContext[:], secret, "base_nonce", keyScheduleContext, suite.nonceBytes)
+		baseNonce, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "base_nonce", keyScheduleContext, suite.nonceBytes)
 		if err != nil {
 			return innerContext{}, err
 		}
+		var aead aeadImpl
 		switch suite.aeadID {
 		case AeadAes128Gcm, AeadAes256Gcm:
 			aead, err = newAesAead(sharedSecret)
@@ -259,14 +263,12 @@ func (suite *Suite) keySchedule(isSender bool, mode Mode, dhSecret []byte, info 
 		if err != nil {
 			return innerContext{}, err
 		}
+		outboundState = aeadState{aead: aead, baseNonce: baseNonce, counter: counter}
 	}
 	return innerContext{
 		suite:          suite,
-		aead:           aead,
-		sharedSecret:   sharedSecret,
 		exporterSecret: exporterSecret,
-		baseNonce:      baseNonce,
-		counter:        counter,
+		outboundState:  outboundState,
 	}, nil
 }
 
@@ -404,7 +406,7 @@ func (suite *Suite) NewClientContext(serverPk []byte, info []byte, psk *Psk) (Cl
 	if psk != nil {
 		mode = ModePsk
 	}
-	context, err := suite.keySchedule(true, mode, dhSecret, info, psk)
+	context, err := suite.keySchedule(mode, dhSecret, info, psk)
 	if err != nil {
 		return ClientContext{}, nil, err
 	}
@@ -421,7 +423,7 @@ func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, 
 	if psk != nil {
 		mode = ModePsk
 	}
-	context, err := suite.keySchedule(true, mode, dhSecret, info, psk)
+	context, err := suite.keySchedule(mode, dhSecret, info, psk)
 	if err != nil {
 		return ClientContext{}, nil, err
 	}
@@ -438,7 +440,7 @@ func (suite *Suite) NewServerContext(enc []byte, serverKp KeyPair, info []byte, 
 	if psk != nil {
 		mode = ModePsk
 	}
-	context, err := suite.keySchedule(false, mode, dhSecret, info, psk)
+	context, err := suite.keySchedule(mode, dhSecret, info, psk)
 	if err != nil {
 		return ServerContext{}, err
 	}
@@ -455,7 +457,7 @@ func (suite *Suite) NewAuthenticatedClientContext(clientKp KeyPair, serverPk []b
 	if psk != nil {
 		mode = ModeAuthPsk
 	}
-	context, err := suite.keySchedule(true, mode, dhSecret, info, psk)
+	context, err := suite.keySchedule(mode, dhSecret, info, psk)
 	if err != nil {
 		return ClientContext{}, nil, err
 	}
@@ -472,7 +474,7 @@ func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientKp KeyPair,
 	if psk != nil {
 		mode = ModeAuthPsk
 	}
-	context, err := suite.keySchedule(true, mode, dhSecret, info, psk)
+	context, err := suite.keySchedule(mode, dhSecret, info, psk)
 	if err != nil {
 		return ClientContext{}, nil, err
 	}
@@ -489,19 +491,19 @@ func (suite *Suite) NewAuthenticatedServerContext(clientPk []byte, enc []byte, s
 	if psk != nil {
 		mode = ModeAuthPsk
 	}
-	context, err := suite.keySchedule(false, mode, dhSecret, info, psk)
+	context, err := suite.keySchedule(mode, dhSecret, info, psk)
 	if err != nil {
 		return ServerContext{}, err
 	}
 	return ServerContext{inner: context}, nil
 }
 
-func (context *innerContext) incrementCounter() error {
+func (state *aeadState) incrementCounter() error {
 	carry := uint16(1)
-	for i := len(context.counter); ; {
+	for i := len(state.counter); ; {
 		i--
-		x := uint16(context.counter[i]) + carry
-		context.counter[i] = byte(x & 0xff)
+		x := uint16(state.counter[i]) + carry
+		state.counter[i] = byte(x & 0xff)
 		carry = x >> 8
 		if i == 0 {
 			break
@@ -515,28 +517,30 @@ func (context *innerContext) incrementCounter() error {
 
 // NextNonce - Get the next nonce to encrypt/decrypt a message with an AEAD
 // Note: this is not thread-safe.
-func (context *innerContext) NextNonce() []byte {
-	if len(context.counter) != len(context.baseNonce) {
+func (state *aeadState) NextNonce() []byte {
+	if len(state.counter) != len(state.baseNonce) {
 		panic("Inconsistent nonce length")
 	}
-	nonce := append(context.baseNonce[:0:0], context.baseNonce...)
+	nonce := append(state.baseNonce[:0:0], state.baseNonce...)
 	for i := 0; i < len(nonce); i++ {
-		nonce[i] ^= context.counter[i]
+		nonce[i] ^= state.counter[i]
 	}
-	context.incrementCounter()
+	state.incrementCounter()
 	return nonce
 }
 
 // EncryptToServer - Encrypt and authenticate a message for the server, with optional associated data
 func (context *ClientContext) EncryptToServer(message []byte, ad []byte) ([]byte, error) {
-	nonce := context.inner.NextNonce()
-	return context.inner.aead.internal().Seal(nil, nonce, message, ad), nil
+	state := &context.inner.outboundState
+	nonce := state.NextNonce()
+	return state.aead.internal().Seal(nil, nonce, message, ad), nil
 }
 
 // DecryptFromClient - Verify and decrypt a ciphertext received from the client, with optional associated data
 func (context *ServerContext) DecryptFromClient(ciphertext []byte, ad []byte) ([]byte, error) {
-	nonce := context.inner.NextNonce()
-	return context.inner.aead.internal().Open(nil, nonce, ciphertext, ad)
+	state := &context.inner.outboundState
+	nonce := state.NextNonce()
+	return state.aead.internal().Open(nil, nonce, ciphertext, ad)
 }
 
 // ExporterSecret - Return the exporter secret
