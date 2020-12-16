@@ -45,6 +45,20 @@ func TestExchange(t *testing.T) {
 	if string(decrypted) != "message" {
 		t.Fatal("Unexpected decryption result")
 	}
+
+	ciphertext, err = serverCtx.EncryptToClient([]byte("response"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decrypted, err = clientCtx.DecryptFromServer(ciphertext, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(decrypted) != "response" {
+		t.Fatal("Unexpected decryption result")
+	}
 }
 
 func TestAuthenticatedExchange(t *testing.T) {

@@ -74,17 +74,22 @@ type KeyPair struct {
 	SecretKey []byte
 }
 
+type aeadState struct {
+	aead      aeadImpl
+	baseNonce []byte
+	counter   []byte
+}
+
 // Suite - HPKE suite
 type Suite struct {
 	suiteIDContext [10]byte
 	suiteIDKEM     [5]byte
 	hash           func() hash.Hash
 	prkBytes       uint16
-	// KeyBytes - Size of the AEAD key, in bytes
-	KeyBytes     uint16
-	nonceBytes   uint16
-	kemHashBytes uint16
-	aeadID       AeadID
+	keyBytes       uint16
+	nonceBytes     uint16
+	kemHashBytes   uint16
+	aeadID         AeadID
 }
 
 // NewSuite - Create a new suite from its components
@@ -126,7 +131,7 @@ func NewSuite(kemID KemID, kdfID KdfID, aeadID AeadID) (*Suite, error) {
 		suiteIDContext: getSuiteIDContext(kemID, kdfID, aeadID),
 		suiteIDKEM:     getSuiteIDKEM(kemID),
 		hash:           hash,
-		KeyBytes:       keyBytes,
+		keyBytes:       keyBytes,
 		prkBytes:       prkBytes,
 		nonceBytes:     nonceBytes,
 		kemHashBytes:   kemHashBytes,
@@ -183,6 +188,23 @@ func (suite *Suite) labeledExpand(suiteID []byte, prk []byte, label string, info
 	return suite.Expand(prk, labeledInfo, length)
 }
 
+func (suite *Suite) newAeadState(key []uint8, baseNonce []uint8) (*aeadState, error) {
+	var aead aeadImpl
+	var err error
+	switch suite.aeadID {
+	case AeadAes128Gcm, AeadAes256Gcm:
+		aead, err = newAesAead(key)
+	case AeadChaCha20Poly1305:
+		aead, err = newChaChaPolyAead(key)
+	default:
+		return nil, errors.New("unimplemented AEAD")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &aeadState{aead: aead, baseNonce: baseNonce, counter: make([]byte, suite.nonceBytes)}, nil
+}
+
 func verifyPskInputs(mode Mode, psk *Psk) error {
 	if psk != nil && ((len(psk.Key) == 0) != (len(psk.ID) == 0)) {
 		return errors.New("a PSK and a PSK ID need both to be set")
@@ -197,18 +219,12 @@ func verifyPskInputs(mode Mode, psk *Psk) error {
 	return nil
 }
 
-type aeadState struct {
-	aead      aeadImpl
-	baseNonce []byte
-	counter   []byte
-}
-
 // innerContext - An AEAD context
 type innerContext struct {
 	suite          *Suite
 	exporterSecret []byte
-	outboundState  aeadState
-	inboundState   aeadState
+	outboundState  *aeadState
+	inboundState   *aeadState
 }
 
 func (inner *innerContext) export(exporterContext []byte, length uint16) ([]byte, error) {
@@ -244,9 +260,9 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk *Ps
 		return innerContext{}, err
 	}
 
-	var outboundState aeadState
+	var outboundState *aeadState
 	if suite.aeadID != AeadExportOnly {
-		outboundKey, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "key", keyScheduleContext, suite.KeyBytes)
+		outboundKey, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "key", keyScheduleContext, suite.keyBytes)
 		if err != nil {
 			return innerContext{}, err
 		}
@@ -254,19 +270,10 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk *Ps
 		if err != nil {
 			return innerContext{}, err
 		}
-		var outboundAead aeadImpl
-		switch suite.aeadID {
-		case AeadAes128Gcm, AeadAes256Gcm:
-			outboundAead, err = newAesAead(outboundKey)
-		case AeadChaCha20Poly1305:
-			outboundAead, err = newChaChaPolyAead(outboundKey)
-		default:
-			return innerContext{}, errors.New("unimplemented AEAD")
-		}
+		outboundState, err = suite.newAeadState(outboundKey, outboundBaseNonce)
 		if err != nil {
 			return innerContext{}, err
 		}
-		outboundState = aeadState{aead: outboundAead, baseNonce: outboundBaseNonce, counter: make([]byte, suite.nonceBytes)}
 	}
 	return innerContext{
 		suite:          suite,
@@ -534,14 +541,54 @@ func (state *aeadState) NextNonce() []byte {
 
 // EncryptToServer - Encrypt and authenticate a message for the server, with optional associated data
 func (context *ClientContext) EncryptToServer(message []byte, ad []byte) ([]byte, error) {
-	state := &context.inner.outboundState
+	state := context.inner.outboundState
 	nonce := state.NextNonce()
 	return state.aead.internal().Seal(nil, nonce, message, ad), nil
 }
 
 // DecryptFromClient - Verify and decrypt a ciphertext received from the client, with optional associated data
 func (context *ServerContext) DecryptFromClient(ciphertext []byte, ad []byte) ([]byte, error) {
-	state := &context.inner.outboundState
+	state := context.inner.outboundState
+	nonce := state.NextNonce()
+	return state.aead.internal().Open(nil, nonce, ciphertext, ad)
+}
+
+func (inner *innerContext) responseState() (*aeadState, error) {
+	key, err := inner.export([]byte("response key"), inner.suite.keyBytes)
+	if err != nil {
+		return nil, err
+	}
+	baseNonce, err := inner.export([]byte("response nonce"), inner.suite.nonceBytes)
+	if err != nil {
+		return nil, err
+	}
+	return inner.suite.newAeadState(key, baseNonce)
+}
+
+// EncryptToClient - Encrypt and authenticate a message for the client, with optional associated data
+func (context *ServerContext) EncryptToClient(message []byte, ad []byte) ([]byte, error) {
+	if context.inner.inboundState == nil {
+		var err error
+		context.inner.inboundState, err = context.inner.responseState()
+		if err != nil {
+			return nil, err
+		}
+	}
+	state := context.inner.inboundState
+	nonce := state.NextNonce()
+	return state.aead.internal().Seal(nil, nonce, message, ad), nil
+}
+
+// DecryptFromServer - Verify and decrypt a ciphertext received from the server, with optional associated data
+func (context *ClientContext) DecryptFromServer(ciphertext []byte, ad []byte) ([]byte, error) {
+	if context.inner.inboundState == nil {
+		var err error
+		context.inner.inboundState, err = context.inner.responseState()
+		if err != nil {
+			return nil, err
+		}
+	}
+	state := context.inner.inboundState
 	nonce := state.NextNonce()
 	return state.aead.internal().Open(nil, nonce, ciphertext, ad)
 }
