@@ -117,4 +117,11 @@ The exporter secret can be obtained with the `ExportedSecret()` function availab
 exporter := serverCtx.ExporterSecret()
 ```
 
+### Key derivation
+
+```go
+secret1, err := clientCtx.Export("description 1")
+secret2, err := serverCtx.Export("description 2");
+```
+
 ## That's it!
