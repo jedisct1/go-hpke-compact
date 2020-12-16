@@ -3,7 +3,7 @@
 
 # A compact HPKE implemention for Go
 
-`hpkecompact` is a small implementation of the [Hybrid Public Key Encryption](https://www.ietf.org/archive/id/draft-irtf-cfrg-hpke-06.html) (HPKE) draft.
+`hpkecompact` is a small implementation of the [Hybrid Public Key Encryption](https://cfrg.github.io/draft-irtf-cfrg-hpke/draft-irtf-cfrg-hpke.html) (HPKE) draft.
 
 It fits in a single file and only uses the Go standard library and `x/crypto`.
 
