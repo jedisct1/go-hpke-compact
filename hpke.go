@@ -211,6 +211,10 @@ type innerContext struct {
 	inboundState   aeadState
 }
 
+func (inner *innerContext) export(exporterContext []byte, length uint16) ([]byte, error) {
+	return inner.suite.labeledExpand(inner.suite.suiteIDContext[:], inner.exporterSecret, "sec", exporterContext, length)
+}
+
 // ClientContext - A client encryption context
 type ClientContext struct {
 	inner innerContext
@@ -240,30 +244,29 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk *Ps
 		return innerContext{}, err
 	}
 
-	counter := make([]byte, suite.nonceBytes)
 	var outboundState aeadState
 	if suite.aeadID != AeadExportOnly {
-		sharedSecret, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "key", keyScheduleContext, suite.KeyBytes)
+		outboundKey, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "key", keyScheduleContext, suite.KeyBytes)
 		if err != nil {
 			return innerContext{}, err
 		}
-		baseNonce, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "base_nonce", keyScheduleContext, suite.nonceBytes)
+		outboundBaseNonce, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "base_nonce", keyScheduleContext, suite.nonceBytes)
 		if err != nil {
 			return innerContext{}, err
 		}
-		var aead aeadImpl
+		var outboundAead aeadImpl
 		switch suite.aeadID {
 		case AeadAes128Gcm, AeadAes256Gcm:
-			aead, err = newAesAead(sharedSecret)
+			outboundAead, err = newAesAead(outboundKey)
 		case AeadChaCha20Poly1305:
-			aead, err = newChaChaPolyAead(sharedSecret)
+			outboundAead, err = newChaChaPolyAead(outboundKey)
 		default:
 			return innerContext{}, errors.New("unimplemented AEAD")
 		}
 		if err != nil {
 			return innerContext{}, err
 		}
-		outboundState = aeadState{aead: aead, baseNonce: baseNonce, counter: counter}
+		outboundState = aeadState{aead: outboundAead, baseNonce: outboundBaseNonce, counter: make([]byte, suite.nonceBytes)}
 	}
 	return innerContext{
 		suite:          suite,
@@ -551,6 +554,16 @@ func (context *ClientContext) ExporterSecret() []byte {
 // ExporterSecret - Return the exporter secret
 func (context *ServerContext) ExporterSecret() []byte {
 	return context.inner.exporterSecret
+}
+
+// Export - Return the exporter secret
+func (context *ClientContext) Export(exporterContext []byte, length uint16) ([]byte, error) {
+	return context.inner.export(exporterContext, length)
+}
+
+// Export - Return the exporter secret
+func (context *ServerContext) Export(exporterContext []byte, length uint16) ([]byte, error) {
+	return context.inner.export(exporterContext, length)
 }
 
 type aeadImpl interface {
