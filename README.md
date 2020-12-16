@@ -60,14 +60,34 @@ Nonces are automatically incremented, so it is safe to call this function multip
 
 Second parameter is optional associated data.
 
-HPKE only supports unidirectional communications from the client to the server.
-
 ### Decryption of a ciphertext received by the server
 
-The server can decrypt a message received by the client:
+The server can decrypt a ciphertext sent by the client:
 
 ```go
 decrypted, err := serverCtx.DecryptFromClient(ciphertext, nil)
+```
+
+Second parameter is optional associated data.
+
+### Encryption of a message from the server to the client
+
+A message can also be encrypted by the server for the client:
+
+```go
+ciphertext, err := clientCtx.EncryptToClient([]byte("response"), nil)
+```
+
+Nonces are automatically incremented, so it is safe to call this function multiple times within the same context.
+
+Second parameter is optional associated data.
+
+### Decryption of a ciphertext received by the client
+
+The client can decrypt a ciphertext sent by the server:
+
+```go
+decrypted, err := serverCtx.DecryptFromServer(ciphertext, nil)
 ```
 
 Second parameter is optional associated data.
