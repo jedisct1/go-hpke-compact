@@ -117,10 +117,10 @@ func TestVectors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hexEqual(serverKp.SecretKey, "ecaf25b8485bcf40b9f013dbb96a6230f25733b8435bba0997a1dedbc7f78806") {
+	if !hexEqual(serverKp.SecretKey, "7bee22939481658190c6c12a1fccddec583af0ab1349e9c398e036ef6d920872") {
 		t.Fatal("Unexpected serverSk")
 	}
-	if !hexEqual(serverKp.PublicKey, "a5912b20892e36905bac635267e2353d58f8cc7525271a2bf57b9c48d2ec2c07") {
+	if !hexEqual(serverKp.PublicKey, "201f8f0ff16db281729e21afbf035751f7ed62ce6da598f4a3ec1de50e573563") {
 		t.Fatal("Unexpected serverPk")
 	}
 
@@ -129,26 +129,26 @@ func TestVectors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hexEqual(encryptedSharedSecret, "950897e0d37a8bdb0f2153edf5fa580a64b399c39fbb3d014f80983352a63617") {
+	if !hexEqual(encryptedSharedSecret, "4fa349feaa609d3202cf4246940dafc7381c390c7800d695b9c52ddaca40855c") {
 		t.Fatal("Unexpected shared secret")
 	}
 
 	c1, _ := clientCtx.EncryptToServer([]byte("message"), []byte("ad"))
-	if !hexEqual(c1, "bb18e3a813f39935e8a98ea0601c9163def047256e3b9e") {
+	if !hexEqual(c1, "7912debfb9f8f1391596328167b3d093f9beaafb5703b4") {
 		t.Fatal("Unexpected ciphertext")
 	}
 
 	c2, _ := clientCtx.EncryptToServer([]byte("message"), []byte("ad"))
-	if !hexEqual(c2, "5bd68e679c85d412c519a72e602ac194a48fa6cb65fb58") {
+	if !hexEqual(c2, "15e0b66ff337ce9ea089e216bcbab1f7fcaa669470bb85") {
 		t.Fatal("Unexpected second ciphertext")
 	}
 
-	if !hexEqual(clientCtx.inner.outboundState.baseNonce, "5d99b2f03c452f7a9441933a") {
+	if !hexEqual(clientCtx.inner.outboundState.baseNonce, "9e6b9543696720d2ad98e9ca") {
 		t.Fatal("Unexpected base nonce")
 	}
 
 	es := clientCtx.ExporterSecret()
-	if !hexEqual(es, "00c3cdacab28e981cc907d12e4f55f0aacae261dbb4eb610447a6bc431bfe2aa") {
+	if !hexEqual(es, "a94124e2580b7eba3bd20a3e908682297faf6ba3e565dc38f7fd7d74811a8bb0") {
 		t.Fatal("Unexpected exported secret")
 	}
 }

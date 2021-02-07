@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
-var hpkeVersion = [7]byte{'H', 'P', 'K', 'E', '-', '0', '7'}
+var hpkeVersion = [7]byte{'H', 'P', 'K', 'E', '-', 'v', '1'}
 
 // Mode - Mode
 type Mode byte
