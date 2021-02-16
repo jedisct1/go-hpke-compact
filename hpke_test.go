@@ -112,43 +112,43 @@ func TestVectors(t *testing.T) {
 
 	info, _ := hex.DecodeString("4f6465206f6e2061204772656369616e2055726e")
 
-	serverSeed, _ := hex.DecodeString("6d9014e4609687b0a3670a22f2a14eac5ae6ad8c0beb62fb3ecb13dc8ebf5e06")
+	serverSeed, _ := hex.DecodeString("29e5fcb544130784b7606e3160d736309d63e044c241d4461a9c9d2e9362f1db")
 	serverKp, err := ctx.DeterministicKeyPair(serverSeed)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hexEqual(serverKp.SecretKey, "7bee22939481658190c6c12a1fccddec583af0ab1349e9c398e036ef6d920872") {
+	if !hexEqual(serverKp.SecretKey, "ad5e716159a11fdb33527ce98fe39f24ae3449ffb6e93e8911f62c0e9781718a") {
 		t.Fatal("Unexpected serverSk")
 	}
-	if !hexEqual(serverKp.PublicKey, "201f8f0ff16db281729e21afbf035751f7ed62ce6da598f4a3ec1de50e573563") {
+	if !hexEqual(serverKp.PublicKey, "46570dfa9f66e17c38e7a081c65cf42bc00e6fed969d326c692748ae866eac6f") {
 		t.Fatal("Unexpected serverPk")
 	}
 
-	clientSeed, _ := hex.DecodeString("6305de86b3cec022fae6f2f2d2951f0f90c8662112124fd62f17e0a99bdbd08e")
+	clientSeed, _ := hex.DecodeString("3b8ed55f38545e6ea459b6838280b61ff4f5df2a140823373380609fb6c68933")
 	clientCtx, encryptedSharedSecret, err := ctx.NewClientDeterministicContext(serverKp.PublicKey, info, nil, clientSeed)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hexEqual(encryptedSharedSecret, "4fa349feaa609d3202cf4246940dafc7381c390c7800d695b9c52ddaca40855c") {
+	if !hexEqual(encryptedSharedSecret, "e7d9aa41faa0481c005d1343b26939c0748a5f6bf1f81fbd1a4e924bf0719149") {
 		t.Fatal("Unexpected shared secret")
 	}
 
 	c1, _ := clientCtx.EncryptToServer([]byte("message"), []byte("ad"))
-	if !hexEqual(c1, "7912debfb9f8f1391596328167b3d093f9beaafb5703b4") {
+	if !hexEqual(c1, "dc54a1124854e041089e52066349a238380aaf6bf98a4c") {
 		t.Fatal("Unexpected ciphertext")
 	}
 
 	c2, _ := clientCtx.EncryptToServer([]byte("message"), []byte("ad"))
-	if !hexEqual(c2, "15e0b66ff337ce9ea089e216bcbab1f7fcaa669470bb85") {
+	if !hexEqual(c2, "37fbdf5f21e77f15291212fe94579054f56eaf5e78f2b5") {
 		t.Fatal("Unexpected second ciphertext")
 	}
 
-	if !hexEqual(clientCtx.inner.outboundState.baseNonce, "9e6b9543696720d2ad98e9ca") {
+	if !hexEqual(clientCtx.inner.outboundState.baseNonce, "ede5198c19b2591389fc7cea") {
 		t.Fatal("Unexpected base nonce")
 	}
 
 	es := clientCtx.ExporterSecret()
-	if !hexEqual(es, "a94124e2580b7eba3bd20a3e908682297faf6ba3e565dc38f7fd7d74811a8bb0") {
+	if !hexEqual(es, "d27ca8c6ce9d8998f3692613c29e5ae0b064234b874a52d65a014eeffed429b9") {
 		t.Fatal("Unexpected exported secret")
 	}
 }
