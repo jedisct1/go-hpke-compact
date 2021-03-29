@@ -82,14 +82,14 @@ type aeadState struct {
 
 // Suite - HPKE suite
 type Suite struct {
-	suiteIDContext [10]byte
-	suiteIDKEM     [5]byte
-	hash           func() hash.Hash
-	prkBytes       uint16
-	keyBytes       uint16
-	nonceBytes     uint16
-	kemHashBytes   uint16
-	aeadID         AeadID
+	SuiteIDContext [10]byte
+	SuiteIDKEM     [5]byte
+	Hash           func() hash.Hash
+	PrkBytes       uint16
+	KeyBytes       uint16
+	NonceBytes     uint16
+	KemHashBytes   uint16
+	AeadID         AeadID
 }
 
 // NewSuite - Create a new suite from its components
@@ -128,14 +128,14 @@ func NewSuite(kemID KemID, kdfID KdfID, aeadID AeadID) (*Suite, error) {
 		return nil, errors.New("unimplemented suite")
 	}
 	suite := Suite{
-		suiteIDContext: getSuiteIDContext(kemID, kdfID, aeadID),
-		suiteIDKEM:     getSuiteIDKEM(kemID),
-		hash:           hash,
-		keyBytes:       keyBytes,
-		prkBytes:       prkBytes,
-		nonceBytes:     nonceBytes,
-		kemHashBytes:   kemHashBytes,
-		aeadID:         aeadID,
+		SuiteIDContext: getSuiteIDContext(kemID, kdfID, aeadID),
+		SuiteIDKEM:     getSuiteIDKEM(kemID),
+		Hash:           hash,
+		KeyBytes:       keyBytes,
+		PrkBytes:       prkBytes,
+		NonceBytes:     nonceBytes,
+		KemHashBytes:   kemHashBytes,
+		AeadID:         aeadID,
 	}
 	return &suite, nil
 }
@@ -156,12 +156,12 @@ func getSuiteIDKEM(kemID KemID) [5]byte {
 
 // Extract - KDF-Extract
 func (suite *Suite) Extract(secret []byte, salt []byte) []byte {
-	return hkdf.Extract(suite.hash, secret, salt)
+	return hkdf.Extract(suite.Hash, secret, salt)
 }
 
 // Expand - KDF-Expand
 func (suite *Suite) Expand(prk []byte, info []byte, length uint16) ([]byte, error) {
-	reader := hkdf.Expand(suite.hash, prk, info)
+	reader := hkdf.Expand(suite.Hash, prk, info)
 	out := make([]byte, length)
 	if readNb, err := reader.Read(out); err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func (suite *Suite) labeledExpand(suiteID []byte, prk []byte, label string, info
 func (suite *Suite) newAeadState(key []uint8, baseNonce []uint8) (*aeadState, error) {
 	var aead aeadImpl
 	var err error
-	switch suite.aeadID {
+	switch suite.AeadID {
 	case AeadAes128Gcm, AeadAes256Gcm:
 		aead, err = newAesAead(key)
 	case AeadChaCha20Poly1305:
@@ -202,7 +202,7 @@ func (suite *Suite) newAeadState(key []uint8, baseNonce []uint8) (*aeadState, er
 	if err != nil {
 		return nil, err
 	}
-	return &aeadState{aead: aead, baseNonce: baseNonce, counter: make([]byte, suite.nonceBytes)}, nil
+	return &aeadState{aead: aead, baseNonce: baseNonce, counter: make([]byte, suite.NonceBytes)}, nil
 }
 
 func verifyPskInputs(mode Mode, psk *Psk) error {
@@ -228,7 +228,7 @@ type innerContext struct {
 }
 
 func (inner *innerContext) export(exporterContext []byte, length uint16) ([]byte, error) {
-	return inner.suite.labeledExpand(inner.suite.suiteIDContext[:], inner.exporterSecret, "sec", exporterContext, length)
+	return inner.suite.labeledExpand(inner.suite.SuiteIDContext[:], inner.exporterSecret, "sec", exporterContext, length)
 }
 
 // ClientContext - A client encryption context
@@ -248,25 +248,25 @@ func (suite *Suite) keySchedule(mode Mode, dhSecret []byte, info []byte, psk *Ps
 	if psk == nil {
 		psk = &Psk{}
 	}
-	pskIDHash := suite.labeledExtract(suite.suiteIDContext[:], nil, "psk_id_hash", psk.ID)
-	infoHash := suite.labeledExtract(suite.suiteIDContext[:], nil, "info_hash", info)
+	pskIDHash := suite.labeledExtract(suite.SuiteIDContext[:], nil, "psk_id_hash", psk.ID)
+	infoHash := suite.labeledExtract(suite.SuiteIDContext[:], nil, "info_hash", info)
 	keyScheduleContext := []byte{byte(mode)}
 	keyScheduleContext = append(keyScheduleContext, pskIDHash...)
 	keyScheduleContext = append(keyScheduleContext, infoHash...)
-	secret := suite.labeledExtract(suite.suiteIDContext[:], dhSecret, "secret", psk.Key)
+	secret := suite.labeledExtract(suite.SuiteIDContext[:], dhSecret, "secret", psk.Key)
 
-	exporterSecret, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "exp", keyScheduleContext, suite.prkBytes)
+	exporterSecret, err := suite.labeledExpand(suite.SuiteIDContext[:], secret, "exp", keyScheduleContext, suite.PrkBytes)
 	if err != nil {
 		return innerContext{}, err
 	}
 
 	var outboundState *aeadState
-	if suite.aeadID != AeadExportOnly {
-		outboundKey, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "key", keyScheduleContext, suite.keyBytes)
+	if suite.AeadID != AeadExportOnly {
+		outboundKey, err := suite.labeledExpand(suite.SuiteIDContext[:], secret, "key", keyScheduleContext, suite.KeyBytes)
 		if err != nil {
 			return innerContext{}, err
 		}
-		outboundBaseNonce, err := suite.labeledExpand(suite.suiteIDContext[:], secret, "base_nonce", keyScheduleContext, suite.nonceBytes)
+		outboundBaseNonce, err := suite.labeledExpand(suite.SuiteIDContext[:], secret, "base_nonce", keyScheduleContext, suite.NonceBytes)
 		if err != nil {
 			return innerContext{}, err
 		}
@@ -295,8 +295,8 @@ func (suite *Suite) GenerateKeyPair() (KeyPair, error) {
 // DeterministicKeyPair - Derive a deterministic key pair from a seed
 func (suite *Suite) DeterministicKeyPair(seed []byte) (KeyPair, error) {
 	var pk, sk [32]byte
-	prk := suite.labeledExtract(suite.suiteIDKEM[:], nil, "dkp_prk", seed)
-	xsk, err := suite.labeledExpand(suite.suiteIDKEM[:], prk, "sk", nil, 32)
+	prk := suite.labeledExtract(suite.SuiteIDKEM[:], nil, "dkp_prk", seed)
+	xsk, err := suite.labeledExpand(suite.SuiteIDKEM[:], prk, "sk", nil, 32)
 	if err != nil {
 		return KeyPair{}, err
 	}
@@ -314,8 +314,8 @@ func (suite *Suite) dh(pk []byte, sk []byte) ([]byte, error) {
 }
 
 func (suite *Suite) extractAndExpandDH(dh []byte, kemContext []byte) ([]byte, error) {
-	prk := suite.labeledExtract(suite.suiteIDKEM[:], nil, "eae_prk", dh)
-	dhSecret, err := suite.labeledExpand(suite.suiteIDKEM[:], prk, "shared_secret", kemContext, suite.kemHashBytes)
+	prk := suite.labeledExtract(suite.SuiteIDKEM[:], nil, "eae_prk", dh)
+	dhSecret, err := suite.labeledExpand(suite.SuiteIDKEM[:], prk, "shared_secret", kemContext, suite.KemHashBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -554,11 +554,11 @@ func (context *ServerContext) DecryptFromClient(ciphertext []byte, ad []byte) ([
 }
 
 func (inner *innerContext) responseState() (*aeadState, error) {
-	key, err := inner.export([]byte("response key"), inner.suite.keyBytes)
+	key, err := inner.export([]byte("response key"), inner.suite.KeyBytes)
 	if err != nil {
 		return nil, err
 	}
-	baseNonce, err := inner.export([]byte("response nonce"), inner.suite.nonceBytes)
+	baseNonce, err := inner.export([]byte("response nonce"), inner.suite.NonceBytes)
 	if err != nil {
 		return nil, err
 	}
