@@ -1,6 +1,7 @@
 package hpkecompact
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	crypto_rand "crypto/rand"
@@ -8,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"hash"
+	"slices"
 
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
@@ -206,14 +208,16 @@ func (suite *Suite) newAeadState(key []uint8, baseNonce []uint8) (*aeadState, er
 }
 
 func verifyPskInputs(mode Mode, psk *Psk) error {
-	if psk != nil && ((len(psk.Key) == 0) != (len(psk.ID) == 0)) {
+	gotPsk := psk != nil && len(psk.Key) != 0
+	gotPskID := psk != nil && len(psk.ID) != 0
+	if gotPsk != gotPskID {
 		return errors.New("a PSK and a PSK ID need both to be set")
 	}
-	if psk != nil {
-		if mode == ModeBase || mode == ModeAuth {
-			return errors.New("PSK input provided when not needed")
-		}
-	} else if mode == ModePsk || mode == ModeAuthPsk {
+	usesPsk := mode == ModePsk || mode == ModeAuthPsk
+	if gotPsk && !usesPsk {
+		return errors.New("PSK input provided when not needed")
+	}
+	if !gotPsk && usesPsk {
 		return errors.New("PSK required for that mode")
 	}
 	return nil
@@ -231,12 +235,12 @@ func (inner *innerContext) export(exporterContext []byte, length uint16) ([]byte
 	return inner.suite.labeledExpand(inner.suite.SuiteIDContext[:], inner.exporterSecret, "sec", exporterContext, length)
 }
 
-// ClientContext - A client encryption context
+// ClientContext - A client encryption context. Not safe for concurrent use.
 type ClientContext struct {
 	inner innerContext
 }
 
-// ServerContext - A server encryption context
+// ServerContext - A server encryption context. Not safe for concurrent use.
 type ServerContext struct {
 	inner innerContext
 }
@@ -322,22 +326,12 @@ func (suite *Suite) extractAndExpandDH(dh []byte, kemContext []byte) ([]byte, er
 	return dhSecret, nil
 }
 
-func (suite *Suite) encap(serverPk []byte, seed []byte) ([]byte, []byte, error) {
-	var ephKp KeyPair
-	var err error
-	if len(seed) > 0 {
-		ephKp, err = suite.DeterministicKeyPair(seed)
-	} else {
-		ephKp, err = suite.GenerateKeyPair()
-	}
-	if err != nil {
-		return nil, nil, err
-	}
+func (suite *Suite) encap(serverPk []byte, ephKp KeyPair) ([]byte, []byte, error) {
 	dh, err := suite.dh(serverPk, ephKp.SecretKey)
 	if err != nil {
 		return nil, nil, err
 	}
-	kemContext := append(ephKp.PublicKey, serverPk...)
+	kemContext := slices.Concat(ephKp.PublicKey, serverPk)
 	dhSecret, err := suite.extractAndExpandDH(dh, kemContext)
 	if err != nil {
 		return nil, nil, err
@@ -350,7 +344,7 @@ func (suite *Suite) decap(ephPk []byte, serverKp KeyPair) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	kemContext := append(ephPk, serverKp.PublicKey...)
+	kemContext := slices.Concat(ephPk, serverKp.PublicKey)
 	dhSecret, err := suite.extractAndExpandDH(dh, kemContext)
 	if err != nil {
 		return nil, err
@@ -358,17 +352,7 @@ func (suite *Suite) decap(ephPk []byte, serverKp KeyPair) ([]byte, error) {
 	return dhSecret, nil
 }
 
-func (suite *Suite) authEncap(serverPk []byte, clientKp KeyPair, seed []byte) ([]byte, []byte, error) {
-	var ephKp KeyPair
-	var err error
-	if len(seed) > 0 {
-		ephKp, err = suite.DeterministicKeyPair(seed)
-	} else {
-		ephKp, err = suite.GenerateKeyPair()
-	}
-	if err != nil {
-		return nil, nil, err
-	}
+func (suite *Suite) authEncap(serverPk []byte, clientKp KeyPair, ephKp KeyPair) ([]byte, []byte, error) {
 	dh1, err := suite.dh(serverPk, ephKp.SecretKey)
 	if err != nil {
 		return nil, nil, err
@@ -377,9 +361,8 @@ func (suite *Suite) authEncap(serverPk []byte, clientKp KeyPair, seed []byte) ([
 	if err != nil {
 		return nil, nil, err
 	}
-	dh := append(dh1, dh2...)
-	kemContext := append(ephKp.PublicKey, serverPk...)
-	kemContext = append(kemContext, clientKp.PublicKey...)
+	dh := slices.Concat(dh1, dh2)
+	kemContext := slices.Concat(ephKp.PublicKey, serverPk, clientKp.PublicKey)
 	dhSecret, err := suite.extractAndExpandDH(dh, kemContext)
 	if err != nil {
 		return nil, nil, err
@@ -396,9 +379,8 @@ func (suite *Suite) authDecap(ephPk []byte, serverKp KeyPair, clientPk []byte) (
 	if err != nil {
 		return nil, err
 	}
-	dh := append(dh1, dh2...)
-	kemContext := append(ephPk, serverKp.PublicKey...)
-	kemContext = append(kemContext, clientPk...)
+	dh := slices.Concat(dh1, dh2)
+	kemContext := slices.Concat(ephPk, serverKp.PublicKey, clientPk)
 	dhSecret, err := suite.extractAndExpandDH(dh, kemContext)
 	if err != nil {
 		return nil, err
@@ -408,7 +390,11 @@ func (suite *Suite) authDecap(ephPk []byte, serverKp KeyPair, clientPk []byte) (
 
 // NewClientContext - Create a new context for a client (aka "sender")
 func (suite *Suite) NewClientContext(serverPk []byte, info []byte, psk *Psk) (ClientContext, []byte, error) {
-	dhSecret, enc, err := suite.encap(serverPk, nil)
+	ephKp, err := suite.GenerateKeyPair()
+	if err != nil {
+		return ClientContext{}, nil, err
+	}
+	dhSecret, enc, err := suite.encap(serverPk, ephKp)
 	if err != nil {
 		return ClientContext{}, nil, err
 	}
@@ -425,7 +411,11 @@ func (suite *Suite) NewClientContext(serverPk []byte, info []byte, psk *Psk) (Cl
 
 // NewClientDeterministicContext - Create a new deterministic context for a client - Should only be used for testing purposes
 func (suite *Suite) NewClientDeterministicContext(serverPk []byte, info []byte, psk *Psk, seed []byte) (ClientContext, []byte, error) {
-	dhSecret, enc, err := suite.encap(serverPk, seed)
+	ephKp, err := suite.DeterministicKeyPair(seed)
+	if err != nil {
+		return ClientContext{}, nil, err
+	}
+	dhSecret, enc, err := suite.encap(serverPk, ephKp)
 	if err != nil {
 		return ClientContext{}, nil, err
 	}
@@ -459,7 +449,11 @@ func (suite *Suite) NewServerContext(enc []byte, serverKp KeyPair, info []byte, 
 
 // NewAuthenticatedClientContext - Create a new context for a client (aka "sender"), with authentication
 func (suite *Suite) NewAuthenticatedClientContext(clientKp KeyPair, serverPk []byte, info []byte, psk *Psk) (ClientContext, []byte, error) {
-	dhSecret, enc, err := suite.authEncap(serverPk, clientKp, nil)
+	ephKp, err := suite.GenerateKeyPair()
+	if err != nil {
+		return ClientContext{}, nil, err
+	}
+	dhSecret, enc, err := suite.authEncap(serverPk, clientKp, ephKp)
 	if err != nil {
 		return ClientContext{}, nil, err
 	}
@@ -476,7 +470,11 @@ func (suite *Suite) NewAuthenticatedClientContext(clientKp KeyPair, serverPk []b
 
 // NewAuthenticatedClientDeterministicContext - Create a new deterministic context for a client, with authentication - Should only be used for testing purposes
 func (suite *Suite) NewAuthenticatedClientDeterministicContext(clientKp KeyPair, serverPk []byte, info []byte, psk *Psk, seed []byte) (ClientContext, []byte, error) {
-	dhSecret, enc, err := suite.authEncap(serverPk, clientKp, seed)
+	ephKp, err := suite.DeterministicKeyPair(seed)
+	if err != nil {
+		return ClientContext{}, nil, err
+	}
+	dhSecret, enc, err := suite.authEncap(serverPk, clientKp, ephKp)
 	if err != nil {
 		return ClientContext{}, nil, err
 	}
@@ -512,6 +510,10 @@ func (suite *Suite) NewAuthenticatedServerContext(clientPk []byte, enc []byte, s
 func (suite *Suite) NewRawCipher(key []byte) (cipher.AEAD, error) {
 	switch suite.AeadID {
 	case AeadAes128Gcm, AeadAes256Gcm:
+		// aes.NewCipher takes any AES key size, so the size the suite asks for has to be checked here.
+		if len(key) != int(suite.KeyBytes) {
+			return nil, errors.New("invalid AEAD key length")
+		}
 		block, err := aes.NewCipher(key)
 		if err != nil {
 			return nil, err
@@ -541,33 +543,52 @@ func (state *aeadState) incrementCounter() error {
 	return nil
 }
 
-// NextNonce - Get the next nonce to encrypt/decrypt a message with an AEAD
-// Note: this is not thread-safe.
-func (state *aeadState) NextNonce() []byte {
-	if len(state.counter) != len(state.baseNonce) {
-		panic("Inconsistent nonce length")
+func (state *aeadState) nextNonce() ([]byte, error) {
+	if len(state.counter) == 0 || len(state.counter) != len(state.baseNonce) {
+		return nil, errors.New("inconsistent nonce length")
 	}
-	nonce := append(state.baseNonce[:0:0], state.baseNonce...)
-	for i := 0; i < len(nonce); i++ {
+
+	// The last sequence number is reserved, because using it would wrap the counter around and reuse a nonce.
+	if bytes.Count(state.counter, []byte{0xff}) == len(state.counter) {
+		return nil, errors.New("message limit reached")
+	}
+	nonce := bytes.Clone(state.baseNonce)
+	for i := range nonce {
 		nonce[i] ^= state.counter[i]
 	}
-	state.incrementCounter()
-	return nonce
+	return nonce, nil
 }
 
-// EncryptToServer - Encrypt and authenticate a message for the server, with optional associated data
-func (context *ClientContext) EncryptToServer(message []byte, ad []byte) ([]byte, error) {
-	state := context.inner.outboundState
-	nonce := state.NextNonce()
-	return state.aead.internal().Seal(nil, nonce, message, ad), nil
+func (state *aeadState) seal(message []byte, ad []byte) ([]byte, error) {
+	nonce, err := state.nextNonce()
+	if err != nil {
+		return nil, err
+	}
+	ciphertext := state.aead.internal().Seal(nil, nonce, message, ad)
+	if err := state.incrementCounter(); err != nil {
+		return nil, err
+	}
+	return ciphertext, nil
 }
 
-// DecryptFromClient - Verify and decrypt a ciphertext received from the client, with optional associated data
-func (context *ServerContext) DecryptFromClient(ciphertext []byte, ad []byte) ([]byte, error) {
-	state := context.inner.outboundState
-	nonce := state.NextNonce()
-	return state.aead.internal().Open(nil, nonce, ciphertext, ad)
+func (state *aeadState) open(ciphertext []byte, ad []byte) ([]byte, error) {
+	nonce, err := state.nextNonce()
+	if err != nil {
+		return nil, err
+	}
+	plaintext, err := state.aead.internal().Open(nil, nonce, ciphertext, ad)
+	if err != nil {
+		return nil, err
+	}
+	if err := state.incrementCounter(); err != nil {
+		return nil, err
+	}
+	return plaintext, nil
 }
+
+// A context only gets an outbound state if its suite can encrypt.
+// An export-only suite never does, and neither does a context that was never set up.
+var errNoEncryption = errors.New("encryption is unavailable for this context")
 
 func (inner *innerContext) responseState() (*aeadState, error) {
 	key, err := inner.export([]byte("response key"), inner.suite.KeyBytes)
@@ -581,32 +602,63 @@ func (inner *innerContext) responseState() (*aeadState, error) {
 	return inner.suite.newAeadState(key, baseNonce)
 }
 
-// EncryptToClient - Encrypt and authenticate a message for the client, with optional associated data
-func (context *ServerContext) EncryptToClient(message []byte, ad []byte) ([]byte, error) {
-	if context.inner.inboundState == nil {
-		var err error
-		context.inner.inboundState, err = context.inner.responseState()
+// outbound returns the state for what the client sends to the server.
+func (inner *innerContext) outbound() (*aeadState, error) {
+	if inner.outboundState == nil {
+		return nil, errNoEncryption
+	}
+	return inner.outboundState, nil
+}
+
+// inbound returns the state for what the server sends back.
+func (inner *innerContext) inbound() (*aeadState, error) {
+	if inner.outboundState == nil {
+		return nil, errNoEncryption
+	}
+	if inner.inboundState == nil {
+		state, err := inner.responseState()
 		if err != nil {
 			return nil, err
 		}
+		inner.inboundState = state
 	}
-	state := context.inner.inboundState
-	nonce := state.NextNonce()
-	return state.aead.internal().Seal(nil, nonce, message, ad), nil
+	return inner.inboundState, nil
+}
+
+// EncryptToServer - Encrypt and authenticate a message for the server, with optional associated data
+func (context *ClientContext) EncryptToServer(message []byte, ad []byte) ([]byte, error) {
+	state, err := context.inner.outbound()
+	if err != nil {
+		return nil, err
+	}
+	return state.seal(message, ad)
+}
+
+// DecryptFromClient - Verify and decrypt a ciphertext received from the client, with optional associated data
+func (context *ServerContext) DecryptFromClient(ciphertext []byte, ad []byte) ([]byte, error) {
+	state, err := context.inner.outbound()
+	if err != nil {
+		return nil, err
+	}
+	return state.open(ciphertext, ad)
+}
+
+// EncryptToClient - Encrypt and authenticate a message for the client, with optional associated data
+func (context *ServerContext) EncryptToClient(message []byte, ad []byte) ([]byte, error) {
+	state, err := context.inner.inbound()
+	if err != nil {
+		return nil, err
+	}
+	return state.seal(message, ad)
 }
 
 // DecryptFromServer - Verify and decrypt a ciphertext received from the server, with optional associated data
 func (context *ClientContext) DecryptFromServer(ciphertext []byte, ad []byte) ([]byte, error) {
-	if context.inner.inboundState == nil {
-		var err error
-		context.inner.inboundState, err = context.inner.responseState()
-		if err != nil {
-			return nil, err
-		}
+	state, err := context.inner.inbound()
+	if err != nil {
+		return nil, err
 	}
-	state := context.inner.inboundState
-	nonce := state.NextNonce()
-	return state.aead.internal().Open(nil, nonce, ciphertext, ad)
+	return state.open(ciphertext, ad)
 }
 
 // ExporterSecret - Return the exporter secret
